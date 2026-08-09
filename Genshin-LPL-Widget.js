@@ -10,12 +10,21 @@ try {
 const theme = DesignSystem.resolvePalette("dark");
 const typography = DesignSystem.typography;
 const layout = DesignSystem.layout;
-const LPL = DesignSystem;
-LPL.colors.ink = new Color(theme.white);
-LPL.colors.muted = new Color(theme.muted);
-LPL.colors.accent = new Color(theme.accent);
-LPL.colors.success = new Color(theme.success);
-LPL.colors.danger = new Color(theme.danger);
+const type = { header: typography.header, title: typography.valueCompact, body: typography.subtitle, caption: typography.subtitleCompact, micro: 10 };
+const spacing = { pagePadding: layout.headerGap + 6, cardRadius: 18, cardPadding: 14, gap: layout.headerGap - 2 };
+const UI = {
+  colors: {
+    ink: new Color(theme.white), muted: new Color(theme.muted), accent: new Color(theme.yellow),
+    success: new Color("#9AD6B4"), danger: new Color(theme.red), surface: new Color(theme.backgroundBottom, 0.92),
+    surface2: new Color(theme.backgroundTop, 0.70)
+  },
+  font(size, weight) { return weight === "bold" ? Font.boldSystemFont(size) : weight === "semibold" ? Font.semiboldSystemFont(size) : Font.systemFont(size); },
+  setPadding(stack, top, right, bottom, left) { stack.setPadding(top, right, bottom, left); return stack; },
+  card(parent, radius = spacing.cardRadius) { const s = parent.addStack(); s.backgroundColor = this.colors.surface2; s.cornerRadius = radius; s.layoutVertically(); return s; },
+  label(parent, value, size, color, weight = "regular") { const t = parent.addText(String(value)); t.font = this.font(size, weight); t.textColor = color; t.lineLimit = 1; return t; },
+  progress(parent, value, max, color = this.colors.accent) { const track = parent.addStack(); track.backgroundColor = new Color(theme.divider, 0.12); track.cornerRadius = 4; track.heightAnchor.constraintEqualToConstant(7).isActive = true; const fill = track.addStack(); fill.backgroundColor = color; fill.cornerRadius = 4; fill.widthAnchor.constraintEqualToConstant(Math.max(4, 210 * Math.min(1, value / Math.max(1, max)))).isActive = true; track.addSpacer(); },
+  badge(parent, value, color = this.colors.accent) { const badge = parent.addStack(); badge.backgroundColor = new Color(theme.yellow, 0.16); badge.cornerRadius = 8; badge.setPadding(4, 7, 4, 7); this.label(badge, value, type.micro + 1, color, "semibold"); }
+};
 
 const STORE = "genshin-lpl-widget";
 const CACHE_KEY = STORE + ".cache";
@@ -89,46 +98,46 @@ async function getData(cfg) {
 
 function addHeader(widget, cfg, data) {
   const row = widget.addStack(); row.centerAlignContent();
-  const mark = row.addText("原"); mark.font = Font.boldSystemFont(22); mark.textColor = LPL.colors.accent;
+  const mark = row.addText("原"); mark.font = Font.boldSystemFont(layout.logo); mark.textColor = UI.colors.accent;
   row.addSpacer(9);
   const col = row.addStack(); col.layoutVertically();
-  LPL.label(col, cfg.nickname, typography.header, LPL.colors.ink, "bold");
-  LPL.label(col, data.stale ? "缓存数据 · 请检查 Cookie" : "提瓦特状态面板", typography.caption, data.stale ? LPL.colors.danger : LPL.colors.muted);
-  row.addSpacer(); LPL.badge(row, "UID " + (cfg.roleId || "未设置"), LPL.colors.muted);
+  UI.label(col, cfg.nickname, type.header, UI.colors.ink, "bold");
+  UI.label(col, data.stale ? "缓存数据 · 请检查 Cookie" : "提瓦特状态面板", type.caption, data.stale ? UI.colors.danger : UI.colors.muted);
+  row.addSpacer(); UI.badge(row, "UID " + (cfg.roleId || "未设置"), UI.colors.muted);
 }
 
 function addResin(widget, d) {
-  const card = LPL.card(widget, layout.cardRadius);
-  LPL.setPadding(card, layout.cardPadding, layout.cardPadding, layout.cardPadding, layout.cardPadding);
+  const card = UI.card(widget, spacing.cardRadius);
+  UI.setPadding(card, spacing.cardPadding, spacing.cardPadding, spacing.cardPadding, spacing.cardPadding);
   const top = card.addStack(); top.centerAlignContent();
-  LPL.label(top, "原粹树脂", typography.body, LPL.colors.muted, "semibold"); top.addSpacer();
-  LPL.label(top, `${d.current_resin || 0} / ${d.max_resin || 160}`, typography.title, LPL.colors.ink, "bold");
-  card.addSpacer(9); LPL.progress(card, d.current_resin || 0, d.max_resin || 160); card.addSpacer(7);
+  UI.label(top, "原粹树脂", type.body, UI.colors.muted, "semibold"); top.addSpacer();
+  UI.label(top, `${d.current_resin || 0} / ${d.max_resin || 160}`, type.title, UI.colors.ink, "bold");
+  card.addSpacer(9); UI.progress(card, d.current_resin || 0, d.max_resin || 160); card.addSpacer(7);
   const bottom = card.addStack(); bottom.centerAlignContent();
-  LPL.label(bottom, d.current_resin >= d.max_resin ? "已回满" : "回满预计 " + duration(d.resin_recovery_time), typography.caption, LPL.colors.muted);
-  bottom.addSpacer(); LPL.label(bottom, percent(d.current_resin, d.max_resin) + "%", typography.caption, LPL.colors.accent, "bold");
+  UI.label(bottom, d.current_resin >= d.max_resin ? "已回满" : "回满预计 " + duration(d.resin_recovery_time), type.caption, UI.colors.muted);
+  bottom.addSpacer(); UI.label(bottom, percent(d.current_resin, d.max_resin) + "%", type.caption, UI.colors.accent, "bold");
 }
 
 function addGrid(widget, d) {
-  const grid = widget.addStack(); grid.spacing = layout.gap;
-  const commission = LPL.card(grid); LPL.setPadding(commission, 12, 12, 12, 12);
-  LPL.label(commission, "每日委托", typography.caption, LPL.colors.muted); commission.addSpacer(5);
-  LPL.label(commission, (d.finished_task_num || 0) + " / " + (d.total_task_num || 4), typography.title, LPL.colors.ink, "bold");
-  LPL.label(commission, d.is_extra_task_reward_received ? "额外奖励已领取" : "额外奖励待领取", typography.micro, d.is_extra_task_reward_received ? LPL.colors.muted : LPL.colors.success);
+  const grid = widget.addStack(); grid.spacing = spacing.gap;
+  const commission = UI.card(grid); UI.setPadding(commission, 12, 12, 12, 12);
+  UI.label(commission, "每日委托", type.caption, UI.colors.muted); commission.addSpacer(5);
+  UI.label(commission, (d.finished_task_num || 0) + " / " + (d.total_task_num || 4), type.title, UI.colors.ink, "bold");
+  UI.label(commission, d.is_extra_task_reward_received ? "额外奖励已领取" : "额外奖励待领取", type.micro, d.is_extra_task_reward_received ? UI.colors.muted : UI.colors.success);
   grid.addSpacer(1);
-  const teapot = LPL.card(grid); LPL.setPadding(teapot, 12, 12, 12, 12);
-  LPL.label(teapot, "洞天宝钱", typography.caption, LPL.colors.muted); teapot.addSpacer(5);
-  LPL.label(teapot, (d.current_home_coin || 0) + " / " + (d.max_home_coin || 2400), typography.title, LPL.colors.ink, "bold");
-  LPL.label(teapot, d.home_coin_recovery_time ? "还有 " + duration(d.home_coin_recovery_time) : "已储满", typography.micro, LPL.colors.muted);
+  const teapot = UI.card(grid); UI.setPadding(teapot, 12, 12, 12, 12);
+  UI.label(teapot, "洞天宝钱", type.caption, UI.colors.muted); teapot.addSpacer(5);
+  UI.label(teapot, (d.current_home_coin || 0) + " / " + (d.max_home_coin || 2400), type.title, UI.colors.ink, "bold");
+  UI.label(teapot, d.home_coin_recovery_time ? "还有 " + duration(d.home_coin_recovery_time) : "已储满", type.micro, UI.colors.muted);
 }
 
 function addWeekly(widget) {
-  const card = LPL.card(widget, layout.cardRadius); LPL.setPadding(card, 12, layout.cardPadding, 12, layout.cardPadding);
+  const card = UI.card(widget, spacing.cardRadius); UI.setPadding(card, 12, spacing.cardPadding, 12, spacing.cardPadding);
   const row = card.addStack(); row.centerAlignContent();
-  LPL.label(row, "周本提醒", typography.body, LPL.colors.ink, "semibold"); row.addSpacer(); LPL.badge(row, "每周一刷新", LPL.colors.accent);
-  card.addSpacer(8); LPL.label(card, "本周可优先领取折扣奖励的周本", typography.caption, LPL.colors.muted); card.addSpacer(6);
+  UI.label(row, "周本提醒", type.body, UI.colors.ink, "semibold"); row.addSpacer(); UI.badge(row, "每周一刷新", UI.colors.accent);
+  card.addSpacer(8); UI.label(card, "本周可优先领取折扣奖励的周本", type.caption, UI.colors.muted); card.addSpacer(6);
   for (const name of ["鸣神岛·天守", "梦想乐土之殁", "黄金屋", "「净琉璃工坊」"]) {
-    const item = card.addStack(); item.centerAlignContent(); LPL.label(item, "•  " + name, typography.caption, LPL.colors.ink); item.addSpacer(); LPL.label(item, "待确认", typography.micro, LPL.colors.muted);
+    const item = card.addStack(); item.centerAlignContent(); UI.label(item, "•  " + name, type.caption, UI.colors.ink); item.addSpacer(); UI.label(item, "待确认", type.micro, UI.colors.muted);
   }
 }
 
@@ -137,11 +146,11 @@ async function render() {
   if (!Keychain.contains(COOKIE_KEY) || !cfg.roleId) cfg = await setup();
   const data = await getData(cfg);
   const widget = new ListWidget(); DesignSystem.applyCardBackground(widget, theme);
-  widget.setPadding(layout.pagePadding, layout.pagePadding, layout.pagePadding, layout.pagePadding);
+  widget.setPadding(spacing.pagePadding, spacing.pagePadding, spacing.pagePadding, spacing.pagePadding);
   addHeader(widget, cfg, data); widget.addSpacer(12); addResin(widget, data.d); widget.addSpacer(8); addGrid(widget, data.d); widget.addSpacer(8); addWeekly(widget); widget.addSpacer();
   const footer = widget.addStack(); footer.centerAlignContent();
-  LPL.label(footer, "更新于 " + new Date(data.at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }), typography.micro, LPL.colors.muted);
-  footer.addSpacer(); LPL.label(footer, "点按脚本可重新设置", typography.micro, LPL.colors.muted);
+  UI.label(footer, "更新于 " + new Date(data.at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }), type.micro, UI.colors.muted);
+  footer.addSpacer(); UI.label(footer, "点按脚本可重新设置", type.micro, UI.colors.muted);
   return widget;
 }
 

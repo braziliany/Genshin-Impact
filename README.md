@@ -3,7 +3,7 @@
 ## 正式开发入口
 
 - `Genshin-LPL-Widget.js`：iPhone 大号组件主脚本
-- `LPL-Design-System.js`：共享 UI 设计系统依赖
+- `LPL-Design-System.js`：正式共享 UI 设计系统依赖（v2.9.1）
 - `Installer.js`：从 GitHub 自动安装/更新依赖和主组件
 
 主脚本会在顶部导入 `LPL-Design-System`，缺少依赖时给出安装提示。推荐先运行 LPL-Scriptable 最新版 `Installer.js`；也可以手动将依赖保存到 Scriptable，脚本名称必须是 `LPL-Design-System`。
