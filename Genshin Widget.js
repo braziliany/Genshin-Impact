@@ -148,9 +148,17 @@ function makeDS(query) {
 function apiMessage(data) {
   const code = Number(data && data.retcode);
   if (code === -10001) return "米游社 Cookie 已失效，请重新获取";
+  if (code === 10001) return "米游社未识别登录状态：请粘贴同一域名的完整 Cookie";
   if (code === 10102) return "请先在米游社开启实时便笺/角色信息公开";
   if (code === 1034) return "米游社触发风控验证：请重新配置 DEVICEFP；若仍失败，请先在米游社完成验证并稍后重试";
   return (data && data.message) || "米游社请求失败";
+}
+
+function responsePreview(raw) {
+  return String(raw || "")
+    .replace(/\s+/g, " ")
+    .replace(/[A-Za-z0-9_=-]{40,}/g, "[已隐藏长字段]")
+    .slice(0, 180);
 }
 
 async function api(path, cfg) {
@@ -180,8 +188,16 @@ async function api(path, cfg) {
     "X-Requested-With": "com.mihoyo.hyperion",
     "User-Agent": `Mozilla/5.0 (Linux; Android 11; MI 8 SE Build/RQ3A.211001.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/104.0.5112.97 Mobile Safari/537.36 miHoYoBBS/${MIYOUSHE.appVersion}`
   };
-  const data = json(await req.loadString());
-  if (!data || data.retcode !== 0) throw new Error(apiMessage(data));
+  const raw = await req.loadString();
+  const status = req.response ? req.response.statusCode : "?";
+  const data = json(raw);
+  if (!data) {
+    const preview = responsePreview(raw) || "空响应";
+    throw new Error(`响应解析失败（HTTP ${status}）：${preview}`);
+  }
+  if (data.retcode !== 0) {
+    throw new Error(`${apiMessage(data)}（retcode ${data.retcode}，HTTP ${status}）`);
+  }
   return data.data || {};
 }
 
@@ -273,6 +289,13 @@ async function render() {
   let cfg = await readConfig();
   if (config.runsInApp || !Keychain.contains(COOKIE_KEY) || !cfg.roleId) cfg = await setup();
   const data = await getData(cfg);
+  if (config.runsInApp && !data.ok) {
+    const alert = new Alert();
+    alert.title = "米游社接口诊断";
+    alert.message = data.error || "未知错误";
+    alert.addAction("知道了");
+    await alert.present();
+  }
   const widget = new ListWidget(); DesignSystem.applyCardBackground(widget, theme);
   widget.setPadding(spacing.pagePadding, spacing.pagePadding, spacing.pagePadding, spacing.pagePadding);
   addHeader(widget, cfg, data); widget.addSpacer(12);

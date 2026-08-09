@@ -26,3 +26,5 @@ Cookie 与设备信息只保存到 Scriptable Keychain。组件使用国服米�
 3. 推荐在「网络/Network」里打开任意米游社请求，复制 Request Headers 中完整的 `Cookie` 值。
 4. 若只复制最小 Cookie，请另外复制 Cookie 列表中同一域名的 `DEVICEFP`（通常为 13 位十六进制字符）。
 5. 不要把 Cookie 发给任何人；它属于账号登录凭证。
+
+直接运行脚本时，接口失败会弹出诊断信息，包括 HTTP 状态和米游社 `retcode`。诊断内容不会包含请求 Cookie；反馈问题时只提供错误码和错误文字即可。
