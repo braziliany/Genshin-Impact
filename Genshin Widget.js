@@ -1,6 +1,6 @@
 // 原神 · LPL Design System widget for Scriptable
 
-const WIDGET_VERSION = "1.0.0";
+const WIDGET_VERSION = "1.0.1";
 
 let DesignSystem;
 try {
@@ -45,12 +45,6 @@ function cookieValue(cookie, name) {
   return item ? item.slice(name.length + 1) : "";
 }
 
-function randomHex(length) {
-  let value = "";
-  for (let i = 0; i < length; i++) value += "0123456789abcdef"[Math.floor(Math.random() * 16)];
-  return value;
-}
-
 function randomUUID() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, token => {
     const r = Math.floor(Math.random() * 16);
@@ -64,8 +58,16 @@ async function readConfig() {
   try { cfg = Object.assign({}, DEFAULT, raw ? JSON.parse(raw) : {}); }
   catch (_) { cfg = Object.assign({}, DEFAULT); }
   const savedCookie = Keychain.contains(COOKIE_KEY) ? Keychain.get(COOKIE_KEY) : "";
+  const cookieFp = cookieValue(savedCookie, "DEVICEFP");
   cfg.deviceId = cfg.deviceId || cookieValue(savedCookie, "_MHYUUID") || randomUUID();
-  cfg.deviceFp = cfg.deviceFp || cookieValue(savedCookie, "DEVICEFP") || randomHex(13);
+  if (cookieFp) {
+    cfg.deviceFp = cookieFp;
+    cfg.deviceFpSource = "cookie";
+  } else if (cfg.deviceFpSource !== "manual") {
+    // 1.0.0 曾生成随机 DEVICEFP；新版清除这类无法通过服务端校验的值。
+    cfg.deviceFp = "";
+    cfg.deviceFpSource = "";
+  }
   Keychain.set(CONFIG_KEY, JSON.stringify(cfg));
   return cfg;
 }
@@ -76,8 +78,8 @@ async function setup() {
   const alert = new Alert();
   alert.title = "原神国服组件设置";
   alert.message = hasCookie
-    ? "Cookie 已保存。若出现 1034 风控，请填写浏览器 Cookie 列表中的 DEVICEFP。"
-    : "建议粘贴 bbs.mihoyo.com 的完整 Cookie；至少需要 LToken，并填写 DEVICEFP。";
+    ? "Cookie 已保存。出现 5003 或 1034 时，请填写浏览器 Cookie 列表中真实的 13 位 DEVICEFP。"
+    : "建议粘贴 bbs.mihoyo.com 的完整 Cookie；至少需要 LToken，并填写真实的 13 位 DEVICEFP。";
   alert.addTextField(hasCookie ? "米游社 Cookie（留空保留）" : "米游社 Cookie", "");
   alert.addTextField("国服游戏 UID", cfg.roleId);
   alert.addTextField("显示昵称", cfg.nickname);
@@ -90,7 +92,16 @@ async function setup() {
   cfg.roleId = alert.textFieldValue(1).trim();
   cfg.nickname = alert.textFieldValue(2).trim() || "旅行者";
   cfg.server = alert.textFieldValue(3).trim() || "cn_gf01";
-  cfg.deviceFp = cookieValue(cookie, "DEVICEFP") || alert.textFieldValue(4).trim() || cfg.deviceFp || randomHex(13);
+  const enteredFp = cookieValue(cookie, "DEVICEFP") || alert.textFieldValue(4).trim();
+  if (enteredFp && !/^[0-9a-f]{13}$/i.test(enteredFp)) {
+    const invalid = new Alert();
+    invalid.title = "DEVICEFP 格式错误";
+    invalid.message = "请从米游社 Cookie 列表复制完整的 13 位 DEVICEFP，只填写值本身。";
+    invalid.addAction("知道了");
+    await invalid.present();
+  }
+  cfg.deviceFp = /^[0-9a-f]{13}$/i.test(enteredFp) ? enteredFp : "";
+  cfg.deviceFpSource = cookieValue(cookie, "DEVICEFP") ? "cookie" : cfg.deviceFp ? "manual" : "";
   cfg.deviceId = cookieValue(cookie, "_MHYUUID") || cfg.deviceId || randomUUID();
   if (cookie) Keychain.set(COOKIE_KEY, cookie);
   Keychain.set(CONFIG_KEY, JSON.stringify(cfg));
@@ -153,6 +164,7 @@ function apiMessage(data) {
   if (code === 10001) return "米游社未识别登录状态：请粘贴同一域名的完整 Cookie";
   if (code === 10102) return "请先在米游社开启实时便笺/角色信息公开";
   if (code === 1034) return "米游社触发风控验证：请重新配置 DEVICEFP；若仍失败，请先在米游社完成验证并稍后重试";
+  if (code === 5003) return "DEVICEFP 校验失败：请填写 Cookie 中真实的 13 位 DEVICEFP，不能使用随机值";
   return (data && data.message) || "米游社请求失败";
 }
 
@@ -171,7 +183,7 @@ async function api(path, cfg) {
   const url = `${MIYOUSHE.host}/game_record/app/genshin/api/${path}?${query}`;
   const req = new Request(url);
   req.timeoutInterval = 20;
-  req.headers = {
+  const headers = {
     Accept: "application/json,text/plain,*/*",
     Cookie: Keychain.get(COOKIE_KEY),
     DS: makeDS(query),
@@ -179,7 +191,6 @@ async function api(path, cfg) {
     "x-rpc-client_type": MIYOUSHE.clientType,
     "x-rpc-language": "zh-cn",
     "x-rpc-device_id": cfg.deviceId || randomUUID(),
-    "x-rpc-device_fp": cfg.deviceFp || randomHex(13),
     "x-rpc-device_model": "MI 8 SE",
     "x-rpc-device_name": "Xiaomi MI 8 SE",
     "x-rpc-sys_version": "11",
@@ -190,6 +201,8 @@ async function api(path, cfg) {
     "X-Requested-With": "com.mihoyo.hyperion",
     "User-Agent": `Mozilla/5.0 (Linux; Android 11; MI 8 SE Build/RQ3A.211001.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/104.0.5112.97 Mobile Safari/537.36 miHoYoBBS/${MIYOUSHE.appVersion}`
   };
+  if (/^[0-9a-f]{13}$/i.test(cfg.deviceFp || "")) headers["x-rpc-device_fp"] = cfg.deviceFp;
+  req.headers = headers;
   const raw = await req.loadString();
   const status = req.response ? req.response.statusCode : "?";
   const data = json(raw);

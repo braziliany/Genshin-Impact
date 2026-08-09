@@ -21,6 +21,8 @@
 
 Cookie 与设备信息只保存到 Scriptable Keychain。组件使用国服米游社接口；官服为 `cn_gf01`，B 服为 `cn_qd01`。Cookie 需来自 `bbs.mihoyo.com`，包含 `ltoken_v2 + ltmid_v2`，或旧版的 `ltoken + ltuid`。若返回 1034，还需填写同一浏览器 Cookie 列表中的 `DEVICEFP`。
 
+若接口返回 `retcode 5003`，表示设备指纹未通过校验。请重新运行脚本并填写 Cookie 列表中真实的 13 位 `DEVICEFP`；脚本不会再自动生成随机值。
+
 ### 获取米游社 Cookie
 
 1. 在电脑浏览器登录 `https://bbs.mihoyo.com/`。
