@@ -12,9 +12,16 @@
 
 1. 将 `Installer.js` 导入 Scriptable 并运行。
 2. 安装器会先安装 `LPL-Design-System`，再安装 `Genshin Widget`。
-3. 安装完成后运行主组件，输入 HoYoLAB Cookie、角色 UID 和昵称。
+3. 安装完成后运行主组件，输入米游社 Cookie、国服游戏 UID 和昵称；官服服务器保持 `cn_gf01`。
 4. 在 iPhone 添加 Scriptable 大号组件并选择 `Genshin Widget`。
 
 以后直接在 Scriptable App 中运行 `Genshin Widget`，会再次打开账号配置；Cookie 输入框留空会保留 Keychain 中的原值。桌面小组件自动刷新时不会弹出配置框。
 
-Cookie 只保存到 Scriptable Keychain。服务器默认是亚服 `os_asia`，国服可改为 `cn_gf01`。
+Cookie 只保存到 Scriptable Keychain。组件使用国服米游社接口；官服为 `cn_gf01`，B 服为 `cn_qd01`。Cookie 需来自 `bbs.mihoyo.com`，包含 `ltoken_v2 + ltmid_v2`，或旧版的 `ltoken + ltuid`。
+
+### 获取米游社 Cookie
+
+1. 在电脑浏览器登录 `https://bbs.mihoyo.com/`。
+2. 按 `F12`，打开「应用/Application」→「Cookies」→ 米游社域名。
+3. 推荐在「网络/Network」里打开任意米游社请求，复制 Request Headers 中完整的 `Cookie` 值。
+4. 不要把 Cookie 发给任何人；它属于账号登录凭证。

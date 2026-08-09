@@ -26,11 +26,17 @@ const UI = {
   badge(parent, value, color = this.colors.accent) { const badge = parent.addStack(); badge.backgroundColor = new Color(theme.yellow, 0.16); badge.cornerRadius = 8; badge.setPadding(4, 7, 4, 7); this.label(badge, value, type.micro + 1, color, "semibold"); }
 };
 
-const STORE = "genshin-lpl-widget";
+const STORE = "genshin-widget-cn-v1";
 const CACHE_KEY = STORE + ".cache";
 const CONFIG_KEY = STORE + ".config";
 const COOKIE_KEY = STORE + ".cookie";
-const DEFAULT = { server: "os_asia", roleId: "", nickname: "旅行者" };
+const DEFAULT = { server: "cn_gf01", roleId: "", nickname: "旅行者" };
+const MIYOUSHE = {
+  host: "https://api-takumi-record.mihoyo.com",
+  appVersion: "2.99.1",
+  clientType: "5",
+  salt4X: "xV8v4Qu54lUKrEYFZkJhB8cuOh9Asafs"
+};
 
 async function readConfig() {
   const raw = Keychain.contains(CONFIG_KEY) ? Keychain.get(CONFIG_KEY) : "";
@@ -42,19 +48,21 @@ async function setup() {
   const cfg = await readConfig();
   const hasCookie = Keychain.contains(COOKIE_KEY);
   const alert = new Alert();
-  alert.title = "原神组件设置";
+  alert.title = "原神国服组件设置";
   alert.message = hasCookie
-    ? "Cookie 已保存在本机 Keychain。留空将保留原 Cookie，输入新值可更新。"
-    : "请输入 HoYoLAB Cookie、角色 UID 和昵称。Cookie 只保存在本机 Keychain。";
-  alert.addTextField(hasCookie ? "Cookie（留空保留原值）" : "Cookie（ltuid_v2=...; ltoken_v2=...）", "");
-  alert.addTextField("角色 UID", cfg.roleId);
+    ? "米游社 Cookie 已保存在本机 Keychain。留空保留原值，输入新值可更新。"
+    : "请输入 bbs.mihoyo.com 的米游社 Cookie。需包含 ltoken_v2 + ltmid_v2，或 ltoken + ltuid。";
+  alert.addTextField(hasCookie ? "米游社 Cookie（留空保留）" : "米游社 Cookie", "");
+  alert.addTextField("国服游戏 UID", cfg.roleId);
   alert.addTextField("显示昵称", cfg.nickname);
+  alert.addTextField("服务器（官服 cn_gf01）", cfg.server);
   alert.addAction("保存");
   alert.addCancelAction("稍后设置");
   if (await alert.present() === -1) return cfg;
   const cookie = alert.textFieldValue(0).trim();
   cfg.roleId = alert.textFieldValue(1).trim();
   cfg.nickname = alert.textFieldValue(2).trim() || "旅行者";
+  cfg.server = alert.textFieldValue(3).trim() || "cn_gf01";
   if (cookie) Keychain.set(COOKIE_KEY, cookie);
   Keychain.set(CONFIG_KEY, JSON.stringify(cfg));
   return cfg;
@@ -62,20 +70,82 @@ async function setup() {
 
 function json(raw) { try { return JSON.parse(raw); } catch (_) { return null; } }
 
+function md5(input) {
+  function add32(a, b) { return (a + b) & 0xffffffff; }
+  function cmn(q, a, b, x, s, t) { a = add32(add32(a, q), add32(x, t)); return add32((a << s) | (a >>> (32 - s)), b); }
+  function ff(a, b, c, d, x, s, t) { return cmn((b & c) | ((~b) & d), a, b, x, s, t); }
+  function gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & (~d)), a, b, x, s, t); }
+  function hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t); }
+  function ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | (~d)), a, b, x, s, t); }
+  function cycle(x, k) {
+    let [a, b, c, d] = x;
+    a=ff(a,b,c,d,k[0],7,-680876936); d=ff(d,a,b,c,k[1],12,-389564586); c=ff(c,d,a,b,k[2],17,606105819); b=ff(b,c,d,a,k[3],22,-1044525330);
+    a=ff(a,b,c,d,k[4],7,-176418897); d=ff(d,a,b,c,k[5],12,1200080426); c=ff(c,d,a,b,k[6],17,-1473231341); b=ff(b,c,d,a,k[7],22,-45705983);
+    a=ff(a,b,c,d,k[8],7,1770035416); d=ff(d,a,b,c,k[9],12,-1958414417); c=ff(c,d,a,b,k[10],17,-42063); b=ff(b,c,d,a,k[11],22,-1990404162);
+    a=ff(a,b,c,d,k[12],7,1804603682); d=ff(d,a,b,c,k[13],12,-40341101); c=ff(c,d,a,b,k[14],17,-1502002290); b=ff(b,c,d,a,k[15],22,1236535329);
+    a=gg(a,b,c,d,k[1],5,-165796510); d=gg(d,a,b,c,k[6],9,-1069501632); c=gg(c,d,a,b,k[11],14,643717713); b=gg(b,c,d,a,k[0],20,-373897302);
+    a=gg(a,b,c,d,k[5],5,-701558691); d=gg(d,a,b,c,k[10],9,38016083); c=gg(c,d,a,b,k[15],14,-660478335); b=gg(b,c,d,a,k[4],20,-405537848);
+    a=gg(a,b,c,d,k[9],5,568446438); d=gg(d,a,b,c,k[14],9,-1019803690); c=gg(c,d,a,b,k[3],14,-187363961); b=gg(b,c,d,a,k[8],20,1163531501);
+    a=gg(a,b,c,d,k[13],5,-1444681467); d=gg(d,a,b,c,k[2],9,-51403784); c=gg(c,d,a,b,k[7],14,1735328473); b=gg(b,c,d,a,k[12],20,-1926607734);
+    a=hh(a,b,c,d,k[5],4,-378558); d=hh(d,a,b,c,k[8],11,-2022574463); c=hh(c,d,a,b,k[11],16,1839030562); b=hh(b,c,d,a,k[14],23,-35309556);
+    a=hh(a,b,c,d,k[1],4,-1530992060); d=hh(d,a,b,c,k[4],11,1272893353); c=hh(c,d,a,b,k[7],16,-155497632); b=hh(b,c,d,a,k[10],23,-1094730640);
+    a=hh(a,b,c,d,k[13],4,681279174); d=hh(d,a,b,c,k[0],11,-358537222); c=hh(c,d,a,b,k[3],16,-722521979); b=hh(b,c,d,a,k[6],23,76029189);
+    a=hh(a,b,c,d,k[9],4,-640364487); d=hh(d,a,b,c,k[12],11,-421815835); c=hh(c,d,a,b,k[15],16,530742520); b=hh(b,c,d,a,k[2],23,-995338651);
+    a=ii(a,b,c,d,k[0],6,-198630844); d=ii(d,a,b,c,k[7],10,1126891415); c=ii(c,d,a,b,k[14],15,-1416354905); b=ii(b,c,d,a,k[5],21,-57434055);
+    a=ii(a,b,c,d,k[12],6,1700485571); d=ii(d,a,b,c,k[3],10,-1894986606); c=ii(c,d,a,b,k[10],15,-1051523); b=ii(b,c,d,a,k[1],21,-2054922799);
+    a=ii(a,b,c,d,k[8],6,1873313359); d=ii(d,a,b,c,k[15],10,-30611744); c=ii(c,d,a,b,k[6],15,-1560198380); b=ii(b,c,d,a,k[13],21,1309151649);
+    a=ii(a,b,c,d,k[4],6,-145523070); d=ii(d,a,b,c,k[11],10,-1120210379); c=ii(c,d,a,b,k[2],15,718787259); b=ii(b,c,d,a,k[9],21,-343485551);
+    x[0]=add32(a,x[0]); x[1]=add32(b,x[1]); x[2]=add32(c,x[2]); x[3]=add32(d,x[3]);
+  }
+  function block(s) { const out=[]; for(let i=0;i<64;i+=4) out[i>>2]=s.charCodeAt(i)+(s.charCodeAt(i+1)<<8)+(s.charCodeAt(i+2)<<16)+(s.charCodeAt(i+3)<<24); return out; }
+  const value = unescape(encodeURIComponent(String(input)));
+  const state = [1732584193,-271733879,-1732584194,271733878];
+  let i;
+  for(i=64;i<=value.length;i+=64) cycle(state, block(value.substring(i-64,i)));
+  const tail = Array(16).fill(0), rest = value.substring(i-64);
+  for(i=0;i<rest.length;i++) tail[i>>2] |= rest.charCodeAt(i) << ((i%4)<<3);
+  tail[i>>2] |= 0x80 << ((i%4)<<3);
+  if(i>55) { cycle(state,tail); for(i=0;i<16;i++) tail[i]=0; }
+  tail[14]=value.length*8; cycle(state,tail);
+  const hex=[]; for(const n of state) for(i=0;i<4;i++) hex.push((n>>(i*8+4))&15,(n>>(i*8))&15);
+  return hex.map(n=>"0123456789abcdef"[n]).join("");
+}
+
+function makeDS(query) {
+  const t = Math.floor(Date.now() / 1000);
+  const r = Math.floor(Math.random() * 100000) + 100001;
+  const source = `salt=${MIYOUSHE.salt4X}&t=${t}&r=${r}&b=&q=${query}`;
+  return `${t},${r},${md5(source)}`;
+}
+
+function apiMessage(data) {
+  const code = Number(data && data.retcode);
+  if (code === -10001) return "米游社 Cookie 已失效，请重新获取";
+  if (code === 10102) return "请先在米游社开启实时便笺/角色信息公开";
+  if (code === 1034) return "米游社触发风控验证，请稍后重试或更新 Cookie";
+  return (data && data.message) || "米游社请求失败";
+}
+
 async function api(path, cfg) {
-  const url = "https://sg-public-api.hoyolab.com/event/game_record/genshin/api/" + path
-    + "?server=" + encodeURIComponent(cfg.server)
-    + "&role_id=" + encodeURIComponent(cfg.roleId);
+  const query = [
+    "role_id=" + encodeURIComponent(cfg.roleId),
+    "server=" + encodeURIComponent(cfg.server)
+  ].sort().join("&");
+  const url = `${MIYOUSHE.host}/game_record/app/genshin/api/${path}?${query}`;
   const req = new Request(url);
+  req.timeoutInterval = 20;
   req.headers = {
     Cookie: Keychain.get(COOKIE_KEY),
-    "x-rpc-app_version": "2.34.1",
-    "x-rpc-client_type": "5",
+    DS: makeDS(query),
+    "x-rpc-app_version": MIYOUSHE.appVersion,
+    "x-rpc-client_type": MIYOUSHE.clientType,
     "x-rpc-language": "zh-cn",
-    Referer: "https://www.hoyolab.com/"
+    Origin: MIYOUSHE.host,
+    Referer: "https://webstatic.mihoyo.com/",
+    "User-Agent": `Mozilla/5.0 (Linux; Android 13; Scriptable Build/TKQ1.220829.002; wv) AppleWebKit/537.36 Version/4.0 Chrome/108.0.5359.128 Mobile Safari/537.36 miHoYoBBS/${MIYOUSHE.appVersion}`
   };
   const data = json(await req.loadString());
-  if (!data || data.retcode !== 0) throw new Error((data && data.message) || "HoYoLAB 请求失败");
+  if (!data || data.retcode !== 0) throw new Error(apiMessage(data));
   return data.data || {};
 }
 
@@ -90,7 +160,7 @@ async function getData(cfg) {
   const cached = Keychain.contains(CACHE_KEY) ? json(Keychain.get(CACHE_KEY)) : null;
   try {
     if (!cfg.roleId || !Keychain.contains(COOKIE_KEY)) throw new Error("尚未完成设置");
-    const result = { ok: true, at: Date.now(), d: await api("daily-note", cfg) };
+    const result = { ok: true, at: Date.now(), d: await api("dailyNote", cfg) };
     Keychain.set(CACHE_KEY, JSON.stringify(result));
     return result;
   } catch (error) {
@@ -124,15 +194,16 @@ function addError(widget, message) {
 }
 
 function addResin(widget, d) {
+  const maxResin = d.max_resin || 200;
   const card = UI.card(widget, spacing.cardRadius);
   UI.setPadding(card, spacing.cardPadding, spacing.cardPadding, spacing.cardPadding, spacing.cardPadding);
   const top = card.addStack(); top.centerAlignContent();
   UI.label(top, "原粹树脂", type.body, UI.colors.muted, "semibold"); top.addSpacer();
-  UI.label(top, `${d.current_resin || 0} / ${d.max_resin || 160}`, type.title, UI.colors.ink, "bold");
-  card.addSpacer(9); UI.progress(card, d.current_resin || 0, d.max_resin || 160); card.addSpacer(7);
+  UI.label(top, `${d.current_resin || 0} / ${maxResin}`, type.title, UI.colors.ink, "bold");
+  card.addSpacer(9); UI.progress(card, d.current_resin || 0, maxResin); card.addSpacer(7);
   const bottom = card.addStack(); bottom.centerAlignContent();
-  UI.label(bottom, d.current_resin >= d.max_resin ? "已回满" : "回满预计 " + duration(d.resin_recovery_time), type.caption, UI.colors.muted);
-  bottom.addSpacer(); UI.label(bottom, percent(d.current_resin, d.max_resin) + "%", type.caption, UI.colors.accent, "bold");
+  UI.label(bottom, d.current_resin >= maxResin ? "已回满" : "回满预计 " + duration(d.resin_recovery_time), type.caption, UI.colors.muted);
+  bottom.addSpacer(); UI.label(bottom, percent(d.current_resin, maxResin) + "%", type.caption, UI.colors.accent, "bold");
 }
 
 function addGrid(widget, d) {
@@ -148,14 +219,18 @@ function addGrid(widget, d) {
   UI.label(teapot, d.home_coin_recovery_time ? "还有 " + duration(d.home_coin_recovery_time) : "已储满", type.micro, UI.colors.muted);
 }
 
-function addWeekly(widget) {
+function addWeekly(widget, d) {
+  const remain = Number(d.remain_resin_discount_num ?? 0);
+  const limit = Number(d.resin_discount_num_limit ?? 3);
   const card = UI.card(widget, spacing.cardRadius); UI.setPadding(card, 12, spacing.cardPadding, 12, spacing.cardPadding);
   const row = card.addStack(); row.centerAlignContent();
-  UI.label(row, "周本提醒", type.body, UI.colors.ink, "semibold"); row.addSpacer(); UI.badge(row, "每周一刷新", UI.colors.accent);
-  card.addSpacer(8); UI.label(card, "本周可优先领取折扣奖励的周本", type.caption, UI.colors.muted); card.addSpacer(6);
-  for (const name of ["鸣神岛·天守", "梦想乐土之殁", "黄金屋", "「净琉璃工坊」"]) {
-    const item = card.addStack(); item.centerAlignContent(); UI.label(item, "•  " + name, type.caption, UI.colors.ink); item.addSpacer(); UI.label(item, "待确认", type.micro, UI.colors.muted);
-  }
+  UI.label(row, "周本减半奖励", type.body, UI.colors.ink, "semibold"); row.addSpacer(); UI.badge(row, "每周一刷新", UI.colors.accent);
+  card.addSpacer(10);
+  const count = card.addStack(); count.centerAlignContent();
+  UI.label(count, "剩余次数", type.caption, UI.colors.muted); count.addSpacer();
+  UI.label(count, `${remain} / ${limit}`, type.title, remain > 0 ? UI.colors.accent : UI.colors.muted, "bold");
+  card.addSpacer(7);
+  UI.label(card, remain > 0 ? "本周仍可领取征讨之花减半奖励" : "本周减半奖励已全部使用", type.caption, remain > 0 ? UI.colors.ink : UI.colors.muted);
 }
 
 async function render() {
@@ -166,7 +241,7 @@ async function render() {
   widget.setPadding(spacing.pagePadding, spacing.pagePadding, spacing.pagePadding, spacing.pagePadding);
   addHeader(widget, cfg, data); widget.addSpacer(12);
   if (data.ok) {
-    addResin(widget, data.d); widget.addSpacer(8); addGrid(widget, data.d); widget.addSpacer(8); addWeekly(widget);
+    addResin(widget, data.d); widget.addSpacer(8); addGrid(widget, data.d); widget.addSpacer(8); addWeekly(widget, data.d);
   } else {
     addError(widget, data.error);
   }
