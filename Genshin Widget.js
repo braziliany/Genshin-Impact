@@ -22,7 +22,7 @@ const UI = {
   setPadding(stack, top, right, bottom, left) { stack.setPadding(top, right, bottom, left); return stack; },
   card(parent, radius = spacing.cardRadius) { const s = parent.addStack(); s.backgroundColor = this.colors.surface2; s.cornerRadius = radius; s.layoutVertically(); return s; },
   label(parent, value, size, color, weight = "regular") { const t = parent.addText(String(value)); t.font = this.font(size, weight); t.textColor = color; t.lineLimit = 1; return t; },
-  progress(parent, value, max, color = this.colors.accent) { const track = parent.addStack(); track.backgroundColor = new Color(theme.divider, 0.12); track.cornerRadius = 4; track.heightAnchor.constraintEqualToConstant(7).isActive = true; const fill = track.addStack(); fill.backgroundColor = color; fill.cornerRadius = 4; fill.widthAnchor.constraintEqualToConstant(Math.max(4, 210 * Math.min(1, value / Math.max(1, max)))).isActive = true; track.addSpacer(); },
+  progress(parent, value, max, color = this.colors.accent) { const track = parent.addStack(); track.backgroundColor = new Color(theme.divider, 0.12); track.cornerRadius = 4; track.size = new Size(210, 7); const fill = track.addStack(); fill.backgroundColor = color; fill.cornerRadius = 4; fill.size = new Size(Math.max(4, 210 * Math.min(1, value / Math.max(1, max))), 7); track.addSpacer(); },
   badge(parent, value, color = this.colors.accent) { const badge = parent.addStack(); badge.backgroundColor = new Color(theme.yellow, 0.16); badge.cornerRadius = 8; badge.setPadding(4, 7, 4, 7); this.label(badge, value, type.micro + 1, color, "semibold"); }
 };
 

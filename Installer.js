@@ -15,10 +15,12 @@ const packages = [
   },
   {
     name: "原神 LPL 大号组件",
-    file: "Genshin-LPL-Widget.js",
+    file: "Genshin Widget.js",
     required: true
   }
 ];
+
+const legacyFiles = ["Genshin-LPL-Widget.js"];
 
 function localPath(file) {
   return fm.joinPath(fm.documentsDirectory(), file);
@@ -66,6 +68,10 @@ async function install() {
   for (const entry of downloaded) {
     fm.writeString(localPath(entry.item.file), entry.text);
   }
+  for (const file of legacyFiles) {
+    const path = localPath(file);
+    if (fm.fileExists(path)) fm.remove(path);
+  }
   return true;
 }
 
@@ -83,11 +89,11 @@ async function main() {
   if (!success) return;
   const alert = new Alert();
   alert.title = "安装完成";
-  alert.message = "依赖已先安装：LPL-Design-System\n主组件随后已安装：Genshin-LPL-Widget\n\n现在可以运行 Genshin-LPL-Widget 完成 HoYoLAB 配置。";
+  alert.message = "依赖已先安装：LPL-Design-System\n主组件随后已安装：Genshin Widget\n\n现在可以运行 Genshin Widget 完成 HoYoLAB 配置。";
   alert.addAction("运行主组件");
   alert.addCancelAction("完成");
   if (await alert.present() === 0) {
-    Safari.open("scriptable:///run?scriptName=" + encodeURIComponent("Genshin-LPL-Widget"));
+    Safari.open("scriptable:///run?scriptName=" + encodeURIComponent("Genshin Widget"));
   }
 }
 
