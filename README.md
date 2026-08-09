@@ -17,11 +17,12 @@
 
 以后直接在 Scriptable App 中运行 `Genshin Widget`，会再次打开账号配置；Cookie 输入框留空会保留 Keychain 中的原值。桌面小组件自动刷新时不会弹出配置框。
 
-Cookie 只保存到 Scriptable Keychain。组件使用国服米游社接口；官服为 `cn_gf01`，B 服为 `cn_qd01`。Cookie 需来自 `bbs.mihoyo.com`，包含 `ltoken_v2 + ltmid_v2`，或旧版的 `ltoken + ltuid`。
+Cookie 与设备信息只保存到 Scriptable Keychain。组件使用国服米游社接口；官服为 `cn_gf01`，B 服为 `cn_qd01`。Cookie 需来自 `bbs.mihoyo.com`，包含 `ltoken_v2 + ltmid_v2`，或旧版的 `ltoken + ltuid`。若返回 1034，还需填写同一浏览器 Cookie 列表中的 `DEVICEFP`。
 
 ### 获取米游社 Cookie
 
 1. 在电脑浏览器登录 `https://bbs.mihoyo.com/`。
 2. 按 `F12`，打开「应用/Application」→「Cookies」→ 米游社域名。
 3. 推荐在「网络/Network」里打开任意米游社请求，复制 Request Headers 中完整的 `Cookie` 值。
-4. 不要把 Cookie 发给任何人；它属于账号登录凭证。
+4. 若只复制最小 Cookie，请另外复制 Cookie 列表中同一域名的 `DEVICEFP`（通常为 13 位十六进制字符）。
+5. 不要把 Cookie 发给任何人；它属于账号登录凭证。
