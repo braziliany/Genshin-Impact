@@ -6,6 +6,15 @@ const REPO = "Genshin-Impact";
 const BRANCH = "main";
 const BASE_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}`;
 const fm = FileManager.iCloud();
+const FALLBACK_RELEASE = {
+  version: "1.0.0",
+  designSystemVersion: "2.9.1",
+  notes: [
+    "新增米游社接口的脱敏诊断弹窗。",
+    "补齐 DEVICEFP 与设备请求头，改善风控提示。",
+    "安装器新增版本对比和更新说明界面。"
+  ]
+};
 
 const packages = [
   {
@@ -35,21 +44,56 @@ async function fetchText(file) {
   return text;
 }
 
-async function confirmInstall(existing) {
+function extractVersion(source) {
+  const match = String(source || "").match(/WIDGET_VERSION\s*=\s*["']([^"']+)["']/);
+  return match ? match[1] : "旧版";
+}
+
+async function readLocalVersion() {
+  const path = localPath("Genshin Widget.js");
+  if (!fm.fileExists(path)) return "未安装";
+  try {
+    if (fm.isFileStoredIniCloud(path)) await fm.downloadFileFromiCloud(path);
+    return extractVersion(fm.readString(path));
+  } catch (_) {
+    return "未知";
+  }
+}
+
+async function fetchRelease() {
+  try {
+    const release = JSON.parse(await fetchText("release.json"));
+    return Object.assign({}, FALLBACK_RELEASE, release);
+  } catch (_) {
+    return FALLBACK_RELEASE;
+  }
+}
+
+async function confirmInstall(localVersion, release) {
+  const installed = localVersion !== "未安装";
+  const current = installed && localVersion === release.version;
   const alert = new Alert();
-  alert.title = "原神组件安装器";
-  alert.message = existing
-    ? "检测到已有安装。继续将更新设计系统和主组件文件。"
-    : "将安装 LPL-Design-System 和原神大号组件。";
-  alert.addAction(existing ? "更新" : "安装");
+  alert.title = !installed ? "安装 Genshin Widget" : current ? "重新安装" : "发现新版本";
+  const notes = Array.isArray(release.notes) ? release.notes : FALLBACK_RELEASE.notes;
+  alert.message = [
+    `本地：${localVersion}`,
+    `远端：${release.version}`,
+    `设计系统：${release.designSystemVersion}`,
+    "",
+    "更新内容：",
+    ...notes.map(note => `- ${note}`),
+    "",
+    "现有设置、Cookie 与组件缓存不会被覆盖。"
+  ].join("\n");
+  alert.addAction(!installed ? "安装" : current ? "重新安装" : "更新");
   alert.addCancelAction("取消");
   return (await alert.present()) === 0;
 }
 
 async function install() {
-  const paths = packages.map(item => localPath(item.file));
-  const existing = paths.some(path => fm.fileExists(path));
-  if (!(await confirmInstall(existing))) return false;
+  const localVersion = await readLocalVersion();
+  const release = await fetchRelease();
+  if (!(await confirmInstall(localVersion, release))) return false;
 
   const downloaded = [];
   for (const item of packages) {
@@ -89,7 +133,7 @@ async function main() {
   if (!success) return;
   const alert = new Alert();
   alert.title = "安装完成";
-  alert.message = "依赖已先安装：LPL-Design-System\n主组件随后已安装：Genshin Widget\n\n现在可以运行 Genshin Widget 完成 HoYoLAB 配置。";
+  alert.message = "依赖已先安装：LPL-Design-System\n主组件随后已安装：Genshin Widget\n\n现有 Cookie 和设置已保留。现在可以运行 Genshin Widget。";
   alert.addAction("运行主组件");
   alert.addCancelAction("完成");
   if (await alert.present() === 0) {

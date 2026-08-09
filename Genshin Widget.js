@@ -1,5 +1,7 @@
 // 原神 · LPL Design System widget for Scriptable
 
+const WIDGET_VERSION = "1.0.0";
+
 let DesignSystem;
 try {
   DesignSystem = importModule("LPL-Design-System");
