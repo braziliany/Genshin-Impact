@@ -40,10 +40,13 @@ async function readConfig() {
 
 async function setup() {
   const cfg = await readConfig();
+  const hasCookie = Keychain.contains(COOKIE_KEY);
   const alert = new Alert();
   alert.title = "原神组件设置";
-  alert.message = "Cookie 只保存在本机 Keychain。请输入 HoYoLAB Cookie、角色 UID 和昵称。";
-  alert.addTextField("Cookie（ltuid_v2=...; ltoken_v2=...）", Keychain.contains(COOKIE_KEY) ? Keychain.get(COOKIE_KEY) : "");
+  alert.message = hasCookie
+    ? "Cookie 已保存在本机 Keychain。留空将保留原 Cookie，输入新值可更新。"
+    : "请输入 HoYoLAB Cookie、角色 UID 和昵称。Cookie 只保存在本机 Keychain。";
+  alert.addTextField(hasCookie ? "Cookie（留空保留原值）" : "Cookie（ltuid_v2=...; ltoken_v2=...）", "");
   alert.addTextField("角色 UID", cfg.roleId);
   alert.addTextField("显示昵称", cfg.nickname);
   alert.addAction("保存");
@@ -102,8 +105,22 @@ function addHeader(widget, cfg, data) {
   row.addSpacer(9);
   const col = row.addStack(); col.layoutVertically();
   UI.label(col, cfg.nickname, type.header, UI.colors.ink, "bold");
-  UI.label(col, data.stale ? "缓存数据 · 请检查 Cookie" : "提瓦特状态面板", type.caption, data.stale ? UI.colors.danger : UI.colors.muted);
+  const status = data.stale ? "缓存数据 · 请检查 Cookie" : data.ok ? "提瓦特状态面板" : "连接失败 · 请重新配置";
+  UI.label(col, status, type.caption, data.ok && !data.stale ? UI.colors.muted : UI.colors.danger);
   row.addSpacer(); UI.badge(row, "UID " + (cfg.roleId || "未设置"), UI.colors.muted);
+}
+
+function addError(widget, message) {
+  const card = UI.card(widget, spacing.cardRadius);
+  UI.setPadding(card, spacing.cardPadding, spacing.cardPadding, spacing.cardPadding, spacing.cardPadding);
+  UI.label(card, "无法获取实时数据", type.body, UI.colors.danger, "semibold");
+  card.addSpacer(8);
+  const detail = card.addText(String(message || "未知错误"));
+  detail.font = UI.font(type.caption, "regular");
+  detail.textColor = UI.colors.muted;
+  detail.lineLimit = 3;
+  card.addSpacer(8);
+  UI.label(card, "请直接运行 Genshin Widget 重新输入 Cookie。", type.caption, UI.colors.ink);
 }
 
 function addResin(widget, d) {
@@ -143,11 +160,17 @@ function addWeekly(widget) {
 
 async function render() {
   let cfg = await readConfig();
-  if (!Keychain.contains(COOKIE_KEY) || !cfg.roleId) cfg = await setup();
+  if (config.runsInApp || !Keychain.contains(COOKIE_KEY) || !cfg.roleId) cfg = await setup();
   const data = await getData(cfg);
   const widget = new ListWidget(); DesignSystem.applyCardBackground(widget, theme);
   widget.setPadding(spacing.pagePadding, spacing.pagePadding, spacing.pagePadding, spacing.pagePadding);
-  addHeader(widget, cfg, data); widget.addSpacer(12); addResin(widget, data.d); widget.addSpacer(8); addGrid(widget, data.d); widget.addSpacer(8); addWeekly(widget); widget.addSpacer();
+  addHeader(widget, cfg, data); widget.addSpacer(12);
+  if (data.ok) {
+    addResin(widget, data.d); widget.addSpacer(8); addGrid(widget, data.d); widget.addSpacer(8); addWeekly(widget);
+  } else {
+    addError(widget, data.error);
+  }
+  widget.addSpacer();
   const footer = widget.addStack(); footer.centerAlignContent();
   UI.label(footer, "更新于 " + new Date(data.at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }), type.micro, UI.colors.muted);
   footer.addSpacer(); UI.label(footer, "点按脚本可重新设置", type.micro, UI.colors.muted);

@@ -15,4 +15,6 @@
 3. 安装完成后运行主组件，输入 HoYoLAB Cookie、角色 UID 和昵称。
 4. 在 iPhone 添加 Scriptable 大号组件并选择 `Genshin Widget`。
 
+以后直接在 Scriptable App 中运行 `Genshin Widget`，会再次打开账号配置；Cookie 输入框留空会保留 Keychain 中的原值。桌面小组件自动刷新时不会弹出配置框。
+
 Cookie 只保存到 Scriptable Keychain。服务器默认是亚服 `os_asia`，国服可改为 `cn_gf01`。
