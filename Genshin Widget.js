@@ -1,6 +1,6 @@
 // 原神 · LPL Design System widget for Scriptable
 
-const WIDGET_VERSION = "1.1.0";
+const WIDGET_VERSION = "1.2.0";
 
 let DesignSystem;
 try {
@@ -35,6 +35,7 @@ const COOKIE_KEY = STORE + ".cookie";
 const DEFAULT = { server: "cn_gf01", roleId: "", nickname: "旅行者" };
 const MIYOUSHE = {
   host: "https://api-takumi-record.mihoyo.com",
+  widgetNoteUrl: "https://api-takumi-record.mihoyo.com/game_record/genshin/aapi/widget/v2",
   deviceFpUrl: "https://public-data-api.mihoyo.com/device-fp/api/getFp",
   appVersion: "2.109.0",
   clientType: "5",
@@ -232,7 +233,7 @@ function apiMessage(data) {
   if (code === 10001) return "米游社未识别登录状态：请粘贴同一域名的完整 Cookie";
   if (code === 10102) return "请先在米游社开启实时便笺/角色信息公开";
   if (code === 1034) return "米游社触发风控验证：请先在米游社完成验证并稍后重试";
-  if (code === 5003) return "设备信息校验失败：脚本已自动刷新配套 DEVICEFP，若仍失败请稍后重试";
+  if (code === 5003) return "米游社主接口设备/风控校验失败";
   return (data && data.message) || "米游社请求失败";
 }
 
@@ -280,9 +281,52 @@ async function api(path, cfg, retried = false) {
   }
   if (data.retcode !== 0) {
     if (Number(data.retcode) === 5003 && !retried && await refreshDeviceFp(cfg, true)) return api(path, cfg, true);
-    throw new Error(`${apiMessage(data)}（retcode ${data.retcode}，HTTP ${status}）`);
+    const error = new Error(`${apiMessage(data)}（retcode ${data.retcode}，HTTP ${status}）`);
+    error.retcode = Number(data.retcode);
+    throw error;
   }
   return data.data || {};
+}
+
+async function widgetNoteApi(cfg) {
+  const request = new Request(MIYOUSHE.widgetNoteUrl);
+  request.timeoutInterval = 20;
+  request.headers = {
+    Accept: "*/*",
+    Cookie: Keychain.get(COOKIE_KEY),
+    "x-rpc-device_id": String(cfg.deviceId || randomUUID()).toUpperCase(),
+    "x-rpc-client_type": "1",
+    "x-rpc-channel": "appstore",
+    "x-rpc-device_model": "iPhone10,2",
+    "x-rpc-device_name": "iPhone",
+    "x-rpc-app_version": MIYOUSHE.appVersion,
+    "x-rpc-sys_version": "17.0",
+    Referer: "https://app.mihoyo.com",
+    "User-Agent": "WidgetExtension/231 CFNetwork/1496.0.7 Darwin/23.5.0"
+  };
+  const raw = await request.loadString();
+  const status = request.response ? request.response.statusCode : "?";
+  const data = json(raw);
+  if (!data) throw new Error(`iOS 小组件接口响应解析失败（HTTP ${status}）：${responsePreview(raw) || "空响应"}`);
+  if (data.retcode !== 0) {
+    const error = new Error(`${apiMessage(data)}（iOS 小组件接口 retcode ${data.retcode}，HTTP ${status}）`);
+    error.retcode = Number(data.retcode);
+    throw error;
+  }
+  return data.data || {};
+}
+
+async function dailyNote(cfg) {
+  try {
+    return await api("dailyNote", cfg);
+  } catch (primaryError) {
+    if (![1034, 5003].includes(Number(primaryError.retcode))) throw primaryError;
+    try {
+      return await widgetNoteApi(cfg);
+    } catch (widgetError) {
+      throw new Error(`主接口：${primaryError.message}\n备用接口：${widgetError.message}`);
+    }
+  }
 }
 
 function duration(seconds) {
@@ -296,7 +340,7 @@ async function getData(cfg) {
   const cached = Keychain.contains(CACHE_KEY) ? json(Keychain.get(CACHE_KEY)) : null;
   try {
     if (!cfg.roleId || !Keychain.contains(COOKIE_KEY)) throw new Error("尚未完成设置");
-    const result = { ok: true, at: Date.now(), d: await api("dailyNote", cfg) };
+    const result = { ok: true, at: Date.now(), d: await dailyNote(cfg) };
     Keychain.set(CACHE_KEY, JSON.stringify(result));
     return result;
   } catch (error) {
