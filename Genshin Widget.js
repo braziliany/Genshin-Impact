@@ -1,6 +1,6 @@
 // 原神 · LPL Design System widget for Scriptable
 
-const WIDGET_VERSION = "1.0.1";
+const WIDGET_VERSION = "1.1.0";
 
 let DesignSystem;
 try {
@@ -35,14 +35,25 @@ const COOKIE_KEY = STORE + ".cookie";
 const DEFAULT = { server: "cn_gf01", roleId: "", nickname: "旅行者" };
 const MIYOUSHE = {
   host: "https://api-takumi-record.mihoyo.com",
+  deviceFpUrl: "https://public-data-api.mihoyo.com/device-fp/api/getFp",
   appVersion: "2.109.0",
   clientType: "5",
   salt4X: "xV8v4Qu54lUKrEYFZkJhB8cuOh9Asafs"
 };
 
+function deviceUserAgent() {
+  return `Mozilla/5.0 (Linux; Android 11; MI 8 SE Build/RQ3A.211001.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/104.0.5112.97 Mobile Safari/537.36 miHoYoBBS/${MIYOUSHE.appVersion}`;
+}
+
 function cookieValue(cookie, name) {
   const item = String(cookie || "").split(";").map(part => part.trim()).find(part => part.startsWith(name + "="));
   return item ? item.slice(name.length + 1) : "";
+}
+
+function randomHex(length) {
+  let value = "";
+  for (let i = 0; i < length; i++) value += "0123456789abcdef"[Math.floor(Math.random() * 16)];
+  return value;
 }
 
 function randomUUID() {
@@ -60,7 +71,9 @@ async function readConfig() {
   const savedCookie = Keychain.contains(COOKIE_KEY) ? Keychain.get(COOKIE_KEY) : "";
   const cookieFp = cookieValue(savedCookie, "DEVICEFP");
   cfg.deviceId = cfg.deviceId || cookieValue(savedCookie, "_MHYUUID") || randomUUID();
-  if (cookieFp) {
+  if (cfg.deviceFpSource === "server" && cfg.fpDeviceId === cfg.deviceId && /^[0-9a-f]{13}$/i.test(cfg.deviceFp || "")) {
+    // 保留由公开设备指纹接口为当前 deviceId 签发的配套指纹。
+  } else if (cookieFp) {
     cfg.deviceFp = cookieFp;
     cfg.deviceFpSource = "cookie";
   } else if (cfg.deviceFpSource !== "manual") {
@@ -78,13 +91,13 @@ async function setup() {
   const alert = new Alert();
   alert.title = "原神国服组件设置";
   alert.message = hasCookie
-    ? "Cookie 已保存。出现 5003 或 1034 时，请填写浏览器 Cookie 列表中真实的 13 位 DEVICEFP。"
-    : "建议粘贴 bbs.mihoyo.com 的完整 Cookie；至少需要 LToken，并填写真实的 13 位 DEVICEFP。";
+    ? "Cookie 已保存。DEVICEFP 可留空，脚本会为自己的稳定设备 ID 自动申请配套指纹。"
+    : "请粘贴 bbs.mihoyo.com 请求头中的完整 Cookie。DEVICEFP 可留空自动获取。";
   alert.addTextField(hasCookie ? "米游社 Cookie（留空保留）" : "米游社 Cookie", "");
   alert.addTextField("国服游戏 UID", cfg.roleId);
   alert.addTextField("显示昵称", cfg.nickname);
   alert.addTextField("服务器（官服 cn_gf01）", cfg.server);
-  alert.addTextField("DEVICEFP（13位，风控必填）", cfg.deviceFp || "");
+  alert.addTextField("DEVICEFP（可留空自动获取）", cfg.deviceFp || "");
   alert.addAction("保存");
   alert.addCancelAction("稍后设置");
   if (await alert.present() === -1) return cfg;
@@ -92,7 +105,8 @@ async function setup() {
   cfg.roleId = alert.textFieldValue(1).trim();
   cfg.nickname = alert.textFieldValue(2).trim() || "旅行者";
   cfg.server = alert.textFieldValue(3).trim() || "cn_gf01";
-  const enteredFp = cookieValue(cookie, "DEVICEFP") || alert.textFieldValue(4).trim();
+  const cookieFp = cookieValue(cookie, "DEVICEFP");
+  const enteredFp = cookieFp || alert.textFieldValue(4).trim();
   if (enteredFp && !/^[0-9a-f]{13}$/i.test(enteredFp)) {
     const invalid = new Alert();
     invalid.title = "DEVICEFP 格式错误";
@@ -100,12 +114,66 @@ async function setup() {
     invalid.addAction("知道了");
     await invalid.present();
   }
-  cfg.deviceFp = /^[0-9a-f]{13}$/i.test(enteredFp) ? enteredFp : "";
-  cfg.deviceFpSource = cookieValue(cookie, "DEVICEFP") ? "cookie" : cfg.deviceFp ? "manual" : "";
+  if (/^[0-9a-f]{13}$/i.test(enteredFp) && enteredFp !== cfg.deviceFp) {
+    cfg.deviceFp = enteredFp;
+    cfg.deviceFpSource = cookieFp ? "cookie" : "manual";
+    cfg.fpDeviceId = "";
+  }
   cfg.deviceId = cookieValue(cookie, "_MHYUUID") || cfg.deviceId || randomUUID();
   if (cookie) Keychain.set(COOKIE_KEY, cookie);
   Keychain.set(CONFIG_KEY, JSON.stringify(cfg));
   return cfg;
+}
+
+async function refreshDeviceFp(cfg, force = false) {
+  if (!force && cfg.deviceFpSource === "server" && cfg.fpDeviceId === cfg.deviceId && /^[0-9a-f]{13}$/i.test(cfg.deviceFp || "")) return true;
+  const extFields = {
+    userAgent: deviceUserAgent(),
+    browserScreenSize: 253125,
+    maxTouchPoints: 5,
+    isTouchSupported: true,
+    browserLanguage: "zh-CN",
+    browserPlat: "Linux armv8l",
+    browserTimeZone: "Asia/Shanghai",
+    webGlRender: "Adreno (TM) 616",
+    webGlVendor: "Qualcomm",
+    numOfPlugins: 0,
+    listOfPlugins: "unknown",
+    screenRatio: 3,
+    deviceMemory: "unknown",
+    hardwareConcurrency: "8",
+    cpuClass: "unknown",
+    ifNotTrack: "unknown",
+    ifAdBlock: 0,
+    hasLiedResolution: 0,
+    hasLiedOs: 0,
+    hasLiedBrowser: 0
+  };
+  try {
+    const request = new Request(MIYOUSHE.deviceFpUrl);
+    request.method = "POST";
+    request.timeoutInterval = 20;
+    request.headers = { "Content-Type": "application/json" };
+    request.body = JSON.stringify({
+      seed_id: randomHex(32),
+      device_id: cfg.deviceId.toLowerCase(),
+      platform: "5",
+      seed_time: String(Date.now()),
+      ext_fields: JSON.stringify(extFields),
+      app_name: "account_cn",
+      device_fp: randomHex(13)
+    });
+    const result = json(await request.loadString());
+    const fp = result && result.retcode === 0 && result.data && result.data.code === 200 ? result.data.device_fp : "";
+    if (!/^[0-9a-f]{13}$/i.test(fp || "")) return false;
+    cfg.deviceFp = fp;
+    cfg.deviceFpSource = "server";
+    cfg.fpDeviceId = cfg.deviceId;
+    Keychain.set(CONFIG_KEY, JSON.stringify(cfg));
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 function json(raw) { try { return JSON.parse(raw); } catch (_) { return null; } }
@@ -163,8 +231,8 @@ function apiMessage(data) {
   if (code === -10001) return "米游社 Cookie 已失效，请重新获取";
   if (code === 10001) return "米游社未识别登录状态：请粘贴同一域名的完整 Cookie";
   if (code === 10102) return "请先在米游社开启实时便笺/角色信息公开";
-  if (code === 1034) return "米游社触发风控验证：请重新配置 DEVICEFP；若仍失败，请先在米游社完成验证并稍后重试";
-  if (code === 5003) return "DEVICEFP 校验失败：请填写 Cookie 中真实的 13 位 DEVICEFP，不能使用随机值";
+  if (code === 1034) return "米游社触发风控验证：请先在米游社完成验证并稍后重试";
+  if (code === 5003) return "设备信息校验失败：脚本已自动刷新配套 DEVICEFP，若仍失败请稍后重试";
   return (data && data.message) || "米游社请求失败";
 }
 
@@ -175,7 +243,7 @@ function responsePreview(raw) {
     .slice(0, 180);
 }
 
-async function api(path, cfg) {
+async function api(path, cfg, retried = false) {
   const query = [
     "role_id=" + encodeURIComponent(cfg.roleId),
     "server=" + encodeURIComponent(cfg.server)
@@ -199,7 +267,7 @@ async function api(path, cfg) {
     Origin: "https://webstatic.mihoyo.com",
     Referer: "https://webstatic.mihoyo.com/",
     "X-Requested-With": "com.mihoyo.hyperion",
-    "User-Agent": `Mozilla/5.0 (Linux; Android 11; MI 8 SE Build/RQ3A.211001.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/104.0.5112.97 Mobile Safari/537.36 miHoYoBBS/${MIYOUSHE.appVersion}`
+    "User-Agent": deviceUserAgent()
   };
   if (/^[0-9a-f]{13}$/i.test(cfg.deviceFp || "")) headers["x-rpc-device_fp"] = cfg.deviceFp;
   req.headers = headers;
@@ -211,6 +279,7 @@ async function api(path, cfg) {
     throw new Error(`响应解析失败（HTTP ${status}）：${preview}`);
   }
   if (data.retcode !== 0) {
+    if (Number(data.retcode) === 5003 && !retried && await refreshDeviceFp(cfg, true)) return api(path, cfg, true);
     throw new Error(`${apiMessage(data)}（retcode ${data.retcode}，HTTP ${status}）`);
   }
   return data.data || {};
@@ -303,6 +372,7 @@ function addWeekly(widget, d) {
 async function render() {
   let cfg = await readConfig();
   if (config.runsInApp || !Keychain.contains(COOKIE_KEY) || !cfg.roleId) cfg = await setup();
+  await refreshDeviceFp(cfg);
   const data = await getData(cfg);
   if (config.runsInApp && !data.ok) {
     const alert = new Alert();

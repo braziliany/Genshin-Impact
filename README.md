@@ -19,9 +19,9 @@
 
 以后直接在 Scriptable App 中运行 `Genshin Widget`，会再次打开账号配置；Cookie 输入框留空会保留 Keychain 中的原值。桌面小组件自动刷新时不会弹出配置框。
 
-Cookie 与设备信息只保存到 Scriptable Keychain。组件使用国服米游社接口；官服为 `cn_gf01`，B 服为 `cn_qd01`。Cookie 需来自 `bbs.mihoyo.com`，包含 `ltoken_v2 + ltmid_v2`，或旧版的 `ltoken + ltuid`。若返回 1034，还需填写同一浏览器 Cookie 列表中的 `DEVICEFP`。
+Cookie 与设备信息只保存到 Scriptable Keychain。组件使用国服米游社接口；官服为 `cn_gf01`，B 服为 `cn_qd01`。Cookie 需来自 `bbs.mihoyo.com` 的完整请求头；仅复制 `ltoken_v2 + ltmid_v2` 可能无法建立登录态。
 
-若接口返回 `retcode 5003`，表示设备指纹未通过校验。请重新运行脚本并填写 Cookie 列表中真实的 13 位 `DEVICEFP`；脚本不会再自动生成随机值。
+组件会使用稳定的设备 ID，通过米游社公开的设备指纹接口自动申请配套 `DEVICEFP`。配置页中的 DEVICEFP 可以留空；遇到 `retcode 5003` 时会自动刷新指纹并重试一次。
 
 ### 获取米游社 Cookie
 
