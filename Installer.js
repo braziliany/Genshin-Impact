@@ -7,12 +7,12 @@ const BRANCH = "main";
 const BASE_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}`;
 const fm = FileManager.iCloud();
 const FALLBACK_RELEASE = {
-  version: "1.2.0",
+  version: "1.3.0",
   designSystemVersion: "2.9.1",
   notes: [
-    "主实时便笺接口返回 5003/1034 时自动改用米游社 iOS 小组件接口。",
-    "备用接口无需 DS 和 DEVICEFP，避免重复触发同一设备校验。",
-    "两个接口都失败时同时显示各自错误码，便于精确诊断。"
+    "新增米游社安全扫码登录，无需手工抓取或发送 Cookie。",
+    "扫码授权后在本机交换 SToken、LToken 与 CookieToken。",
+    "所有登录凭证仅保存到 Scriptable Keychain。"
   ]
 };
 

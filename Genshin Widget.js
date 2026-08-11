@@ -1,6 +1,6 @@
 // 原神 · LPL Design System widget for Scriptable
 
-const WIDGET_VERSION = "1.2.0";
+const WIDGET_VERSION = "1.3.0";
 
 let DesignSystem;
 try {
@@ -37,6 +37,10 @@ const MIYOUSHE = {
   host: "https://api-takumi-record.mihoyo.com",
   widgetNoteUrl: "https://api-takumi-record.mihoyo.com/game_record/genshin/aapi/widget/v2",
   deviceFpUrl: "https://public-data-api.mihoyo.com/device-fp/api/getFp",
+  qrFetchUrl: "https://passport-api.mihoyo.com/account/ma-cn-passport/app/createQRLogin",
+  qrQueryUrl: "https://passport-api.mihoyo.com/account/ma-cn-passport/app/queryQRLoginStatus",
+  cookieTokenUrl: "https://passport-api.mihoyo.com/account/auth/api/getCookieAccountInfoBySToken",
+  ltokenUrl: "https://passport-api.mihoyo.com/account/auth/api/getLTokenBySToken",
   appVersion: "2.109.0",
   clientType: "5",
   salt4X: "xV8v4Qu54lUKrEYFZkJhB8cuOh9Asafs"
@@ -49,6 +53,109 @@ function deviceUserAgent() {
 function cookieValue(cookie, name) {
   const item = String(cookie || "").split(";").map(part => part.trim()).find(part => part.startsWith(name + "="));
   return item ? item.slice(name.length + 1) : "";
+}
+
+function mergeCookies(...values) {
+  const fields = {};
+  for (const value of values) {
+    for (const part of String(value || "").split(";")) {
+      const index = part.indexOf("=");
+      if (index > 0) fields[part.slice(0, index).trim()] = part.slice(index + 1).trim();
+    }
+  }
+  return Object.keys(fields).filter(key => fields[key]).map(key => `${key}=${fields[key]}`).join("; ");
+}
+
+async function requestJson(url, options = {}) {
+  const request = new Request(url);
+  request.method = options.method || "GET";
+  request.timeoutInterval = options.timeout || 20;
+  request.headers = options.headers || {};
+  if (options.body !== undefined) request.body = JSON.stringify(options.body);
+  const raw = await request.loadString();
+  const data = json(raw);
+  if (!data) throw new Error(`响应解析失败：${responsePreview(raw) || "空响应"}`);
+  return data;
+}
+
+function qrHeaders(deviceId) {
+  return {
+    Accept: "application/json, text/plain, */*",
+    "User-Agent": "HYPContainer/1.3.3.182",
+    "x-rpc-app_id": "ddxf5dufpuyo",
+    "x-rpc-client_type": "3",
+    "x-rpc-device_id": deviceId,
+    "Content-Type": "application/json"
+  };
+}
+
+async function showLoginQr(url) {
+  const web = new WebView();
+  const encodedUrl = JSON.stringify(url);
+  await web.loadHTML(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#17162f;color:#fff;font-family:-apple-system;text-align:center}main{padding:28px 18px}h2{margin:8px 0 10px}p{color:#aaa8c3;line-height:1.5}.box{display:inline-block;background:#fff;padding:16px;border-radius:20px;margin:18px 0}#qr{width:280px;height:280px}</style></head><body><main><h2>米游社安全登录</h2><p>请截图二维码，再使用米游社或游戏客户端的扫码功能从相册识别并确认。</p><div class="box"><div id="qr"></div></div><p>确认后返回 Scriptable，关闭此页面并点击“我已确认”。</p></main><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script><script>new QRCode(document.getElementById('qr'),{text:${encodedUrl},width:280,height:280,correctLevel:QRCode.CorrectLevel.M});</script></body></html>`);
+  await web.present();
+}
+
+function wait(milliseconds) {
+  return new Promise(resolve => Timer.schedule(milliseconds, false, resolve));
+}
+
+async function exchangeQrLogin(cfg) {
+  const fetched = await requestJson(MIYOUSHE.qrFetchUrl, {
+    method: "POST",
+    headers: qrHeaders(cfg.deviceId),
+    body: {}
+  });
+  if (fetched.retcode !== 0 || !fetched.data || !fetched.data.url) throw new Error(fetched.message || "无法生成登录二维码");
+  const qrUrl = fetched.data.url;
+  const ticket = fetched.data.ticket;
+  if (!ticket) throw new Error("登录二维码缺少 ticket");
+  await showLoginQr(qrUrl);
+
+  const ready = new Alert();
+  ready.title = "等待扫码确认";
+  ready.message = "请先在米游社或游戏客户端完成扫码授权，再返回 Scriptable。";
+  ready.addAction("我已确认");
+  ready.addCancelAction("取消");
+  if (await ready.present() === -1) throw new Error("已取消扫码登录");
+
+  let login;
+  for (let i = 0; i < 20; i++) {
+    const queried = await requestJson(MIYOUSHE.qrQueryUrl, {
+      method: "POST",
+      headers: qrHeaders(cfg.deviceId),
+      body: { ticket }
+    });
+    if (queried.retcode === -106) throw new Error("二维码已过期，请重新扫码");
+    const state = queried.data && (queried.data.status || queried.data.stat);
+    if (state === "Confirmed") {
+      const token = queried.data.tokens && queried.data.tokens[0] && queried.data.tokens[0].token;
+      const user = queried.data.user_info || {};
+      if (token && user.aid && user.mid) login = { uid: String(user.aid), token, mid: user.mid };
+      break;
+    }
+    await wait(1000);
+  }
+  if (!login) throw new Error("未检测到扫码确认，请重新运行后再试");
+
+  let authCookie = mergeCookies(`stoken=${login.token}`, `stuid=${login.uid}`, `mid=${login.mid}`, `account_id=${login.uid}`);
+  const headers = { Cookie: authCookie };
+
+  const [cookieResult, ltokenResult] = await Promise.all([
+    requestJson(MIYOUSHE.cookieTokenUrl, { headers }),
+    requestJson(MIYOUSHE.ltokenUrl, { headers })
+  ]);
+  if (cookieResult.retcode !== 0 || !cookieResult.data || !cookieResult.data.cookie_token) throw new Error(cookieResult.message || "无法获取 CookieToken");
+  if (ltokenResult.retcode !== 0 || !ltokenResult.data || !ltokenResult.data.ltoken) throw new Error(ltokenResult.message || "无法获取 LToken");
+  authCookie = mergeCookies(
+    Keychain.contains(COOKIE_KEY) ? Keychain.get(COOKIE_KEY) : "",
+    authCookie,
+    `cookie_token=${cookieResult.data.cookie_token}`,
+    `ltoken=${ltokenResult.data.ltoken}`,
+    `ltuid=${login.uid}`
+  );
+  Keychain.set(COOKIE_KEY, authCookie);
+  return true;
 }
 
 function randomHex(length) {
@@ -92,16 +199,18 @@ async function setup() {
   const alert = new Alert();
   alert.title = "原神国服组件设置";
   alert.message = hasCookie
-    ? "Cookie 已保存。DEVICEFP 可留空，脚本会为自己的稳定设备 ID 自动申请配套指纹。"
-    : "请粘贴 bbs.mihoyo.com 请求头中的完整 Cookie。DEVICEFP 可留空自动获取。";
+    ? "Cookie 已保存。推荐使用安全扫码登录补齐 SToken；Token 只保存在本机 Keychain。"
+    : "推荐使用安全扫码登录，无需手工抓取 Cookie。也可以继续粘贴完整 Cookie。";
   alert.addTextField(hasCookie ? "米游社 Cookie（留空保留）" : "米游社 Cookie", "");
   alert.addTextField("国服游戏 UID", cfg.roleId);
   alert.addTextField("显示昵称", cfg.nickname);
   alert.addTextField("服务器（官服 cn_gf01）", cfg.server);
   alert.addTextField("DEVICEFP（可留空自动获取）", cfg.deviceFp || "");
   alert.addAction("保存");
+  alert.addAction("安全扫码登录");
   alert.addCancelAction("稍后设置");
-  if (await alert.present() === -1) return cfg;
+  const action = await alert.present();
+  if (action === -1) return cfg;
   const cookie = alert.textFieldValue(0).trim();
   cfg.roleId = alert.textFieldValue(1).trim();
   cfg.nickname = alert.textFieldValue(2).trim() || "旅行者";
@@ -123,6 +232,22 @@ async function setup() {
   cfg.deviceId = cookieValue(cookie, "_MHYUUID") || cfg.deviceId || randomUUID();
   if (cookie) Keychain.set(COOKIE_KEY, cookie);
   Keychain.set(CONFIG_KEY, JSON.stringify(cfg));
+  if (action === 1) {
+    try {
+      await exchangeQrLogin(cfg);
+      const success = new Alert();
+      success.title = "登录成功";
+      success.message = "授权 Token 已安全保存到 Scriptable Keychain。";
+      success.addAction("继续");
+      await success.present();
+    } catch (error) {
+      const failed = new Alert();
+      failed.title = "扫码登录失败";
+      failed.message = error.message || String(error);
+      failed.addAction("知道了");
+      await failed.present();
+    }
+  }
   return cfg;
 }
 
