@@ -1,9 +1,9 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "designSystemVersion": "2.9.1",
   "notes": [
-    "新增米游社安全扫码登录，无需手工抓取或发送 Cookie。",
-    "扫码授权后在本机交换 SToken、LToken 与 CookieToken。",
-    "所有登录凭证仅保存到 Scriptable Keychain。"
+    "修复洞天宝钱未满时错误显示已储满。",
+    "新增探索派遣、参量质变仪和周本紧凑状态卡。",
+    "新增缓存时间提示与安全退出登录。"
   ]
 }

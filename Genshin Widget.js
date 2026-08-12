@@ -1,6 +1,6 @@
 // 原神 · LPL Design System widget for Scriptable
 
-const WIDGET_VERSION = "1.3.0";
+const WIDGET_VERSION = "1.4.0";
 
 let DesignSystem;
 try {
@@ -208,9 +208,22 @@ async function setup() {
   alert.addTextField("DEVICEFP（可留空自动获取）", cfg.deviceFp || "");
   alert.addAction("保存");
   alert.addAction("安全扫码登录");
+  if (hasCookie) alert.addDestructiveAction("退出登录");
   alert.addCancelAction("稍后设置");
   const action = await alert.present();
   if (action === -1) return cfg;
+  if (hasCookie && action === 2) {
+    const confirm = new Alert();
+    confirm.title = "退出米游社登录";
+    confirm.message = "将删除本机 Keychain 中的 Cookie、Token 和组件缓存。UID、昵称及服务器设置会保留。";
+    confirm.addDestructiveAction("确认退出");
+    confirm.addCancelAction("取消");
+    if (await confirm.present() === 0) {
+      if (Keychain.contains(COOKIE_KEY)) Keychain.remove(COOKIE_KEY);
+      if (Keychain.contains(CACHE_KEY)) Keychain.remove(CACHE_KEY);
+    }
+    return cfg;
+  }
   const cookie = alert.textFieldValue(0).trim();
   cfg.roleId = alert.textFieldValue(1).trim();
   cfg.nickname = alert.textFieldValue(2).trim() || "旅行者";
@@ -443,11 +456,11 @@ async function widgetNoteApi(cfg) {
 
 async function dailyNote(cfg) {
   try {
-    return await api("dailyNote", cfg);
+    return Object.assign(await api("dailyNote", cfg), { _source: "主接口" });
   } catch (primaryError) {
     if (![1034, 5003].includes(Number(primaryError.retcode))) throw primaryError;
     try {
-      return await widgetNoteApi(cfg);
+      return Object.assign(await widgetNoteApi(cfg), { _source: "iOS 备用接口" });
     } catch (widgetError) {
       throw new Error(`主接口：${primaryError.message}\n备用接口：${widgetError.message}`);
     }
@@ -460,6 +473,42 @@ function duration(seconds) {
   return h ? h + "小时" + (m ? m + "分" : "") : m + "分钟";
 }
 function percent(value, max) { return Math.round(Number(value || 0) / Math.max(1, Number(max || 1)) * 100); }
+function atMaximum(value, max) {
+  const current = Number(value || 0), limit = Number(max || 0);
+  return limit > 0 && current >= limit;
+}
+function compactDuration(seconds) {
+  const total = Math.max(0, Number(seconds || 0));
+  const day = Math.floor(total / 86400), hour = Math.floor((total % 86400) / 3600), minute = Math.floor((total % 3600) / 60);
+  if (day) return `${day}天${hour}时`;
+  if (hour) return `${hour}小时${minute ? minute + "分" : ""}`;
+  return `${Math.max(1, minute)}分钟`;
+}
+function cacheAge(at) {
+  const seconds = Math.max(0, Math.floor((Date.now() - Number(at || Date.now())) / 1000));
+  if (seconds < 60) return "刚刚";
+  if (seconds < 3600) return Math.floor(seconds / 60) + "分钟前";
+  return Math.floor(seconds / 3600) + "小时前";
+}
+
+function expeditionState(d) {
+  const items = Array.isArray(d.expeditions) ? d.expeditions : [];
+  const max = Number(d.max_expedition_num ?? items.length ?? 0);
+  const finished = items.filter(item => item && (item.status === "Finished" || Number(item.remained_time || 0) <= 0)).length;
+  const remaining = items.map(item => Number(item && item.remained_time || 0)).filter(value => value > 0);
+  if (!items.length) return { value: `0 / ${max || "—"}`, detail: "暂未派遣", accent: false };
+  if (finished) return { value: `${finished} / ${max || items.length}`, detail: `${finished} 个可领取`, accent: true };
+  return { value: `0 / ${max || items.length}`, detail: remaining.length ? `最近 ${compactDuration(Math.min(...remaining))}` : "进行中", accent: false };
+}
+
+function transformerState(d) {
+  const transformer = d.transformer;
+  if (!transformer || transformer.obtained === false) return { value: "—", detail: "暂不可用", accent: false };
+  const recovery = transformer.recovery_time || {};
+  const seconds = Number(recovery.Day || 0) * 86400 + Number(recovery.Hour || 0) * 3600 + Number(recovery.Minute || 0) * 60 + Number(recovery.Second || 0);
+  if (recovery.reached === true || seconds <= 0) return { value: "可使用", detail: "参量质变仪", accent: true };
+  return { value: compactDuration(seconds), detail: "后可使用", accent: false };
+}
 
 async function getData(cfg) {
   const cached = Keychain.contains(CACHE_KEY) ? json(Keychain.get(CACHE_KEY)) : null;
@@ -480,7 +529,7 @@ function addHeader(widget, cfg, data) {
   row.addSpacer(9);
   const col = row.addStack(); col.layoutVertically();
   UI.label(col, cfg.nickname, type.header, UI.colors.ink, "bold");
-  const status = data.stale ? "缓存数据 · 请检查 Cookie" : data.ok ? "提瓦特状态面板" : "连接失败 · 请重新配置";
+  const status = data.stale ? `缓存数据 · ${cacheAge(data.at)}` : data.ok ? "提瓦特状态面板" : "连接失败 · 请重新配置";
   UI.label(col, status, type.caption, data.ok && !data.stale ? UI.colors.muted : UI.colors.danger);
   row.addSpacer(); UI.badge(row, "UID " + (cfg.roleId || "未设置"), UI.colors.muted);
 }
@@ -521,21 +570,39 @@ function addGrid(widget, d) {
   const teapot = UI.card(grid); UI.setPadding(teapot, 12, 12, 12, 12);
   UI.label(teapot, "洞天宝钱", type.caption, UI.colors.muted); teapot.addSpacer(5);
   UI.label(teapot, (d.current_home_coin || 0) + " / " + (d.max_home_coin || 2400), type.title, UI.colors.ink, "bold");
-  UI.label(teapot, d.home_coin_recovery_time ? "还有 " + duration(d.home_coin_recovery_time) : "已储满", type.micro, UI.colors.muted);
+  const maxHomeCoin = Number(d.max_home_coin || 2400);
+  const homeCoin = Number(d.current_home_coin || 0);
+  const homeCoinStatus = atMaximum(homeCoin, maxHomeCoin)
+    ? "已储满"
+    : Number(d.home_coin_recovery_time || 0) > 0 ? "还有 " + duration(d.home_coin_recovery_time) : "持续积累中";
+  UI.label(teapot, homeCoinStatus, type.micro, UI.colors.muted);
 }
 
-function addWeekly(widget, d) {
+function addStatusColumn(parent, title, value, detail, accent = false) {
+  const column = parent.addStack(); column.layoutVertically();
+  UI.label(column, title, type.micro, UI.colors.muted);
+  column.addSpacer(4);
+  UI.label(column, value, type.body, accent ? UI.colors.accent : UI.colors.ink, "semibold");
+  column.addSpacer(2);
+  UI.label(column, detail, type.micro, accent ? UI.colors.success : UI.colors.muted);
+  return column;
+}
+
+function addOverview(widget, d) {
   const remain = Number(d.remain_resin_discount_num ?? 0);
   const limit = Number(d.resin_discount_num_limit ?? 3);
+  const expedition = expeditionState(d);
+  const transformer = transformerState(d);
   const card = UI.card(widget, spacing.cardRadius); UI.setPadding(card, 12, spacing.cardPadding, 12, spacing.cardPadding);
   const row = card.addStack(); row.centerAlignContent();
-  UI.label(row, "周本减半奖励", type.body, UI.colors.ink, "semibold"); row.addSpacer(); UI.badge(row, "每周一刷新", UI.colors.accent);
-  card.addSpacer(10);
-  const count = card.addStack(); count.centerAlignContent();
-  UI.label(count, "剩余次数", type.caption, UI.colors.muted); count.addSpacer();
-  UI.label(count, `${remain} / ${limit}`, type.title, remain > 0 ? UI.colors.accent : UI.colors.muted, "bold");
-  card.addSpacer(7);
-  UI.label(card, remain > 0 ? "本周仍可领取征讨之花减半奖励" : "本周减半奖励已全部使用", type.caption, remain > 0 ? UI.colors.ink : UI.colors.muted);
+  UI.label(row, "周常与探索", type.body, UI.colors.ink, "semibold"); row.addSpacer(); UI.badge(row, "实时便笺", UI.colors.accent);
+  card.addSpacer(9);
+  const columns = card.addStack();
+  addStatusColumn(columns, "周本减半", `${remain} / ${limit}`, remain > 0 ? "仍可使用" : "本周已用完", remain > 0);
+  columns.addSpacer(14);
+  addStatusColumn(columns, "探索派遣", expedition.value, expedition.detail, expedition.accent);
+  columns.addSpacer(14);
+  addStatusColumn(columns, "参量质变仪", transformer.value, transformer.detail, transformer.accent);
 }
 
 async function render() {
@@ -554,13 +621,14 @@ async function render() {
   widget.setPadding(spacing.pagePadding, spacing.pagePadding, spacing.pagePadding, spacing.pagePadding);
   addHeader(widget, cfg, data); widget.addSpacer(12);
   if (data.ok) {
-    addResin(widget, data.d); widget.addSpacer(8); addGrid(widget, data.d); widget.addSpacer(8); addWeekly(widget, data.d);
+    addResin(widget, data.d); widget.addSpacer(8); addGrid(widget, data.d); widget.addSpacer(8); addOverview(widget, data.d);
   } else {
     addError(widget, data.error);
   }
   widget.addSpacer();
   const footer = widget.addStack(); footer.centerAlignContent();
-  UI.label(footer, "更新于 " + new Date(data.at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }), type.micro, UI.colors.muted);
+  const timeLabel = new Date(data.at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+  UI.label(footer, (data.stale ? "缓存于 " : "更新于 ") + timeLabel, type.micro, UI.colors.muted);
   footer.addSpacer(); UI.label(footer, "点按脚本可重新设置", type.micro, UI.colors.muted);
   return widget;
 }

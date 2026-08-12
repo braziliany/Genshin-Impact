@@ -19,6 +19,8 @@
 
 以后直接在 Scriptable App 中运行 `Genshin Widget`，会再次打开账号配置；Cookie 输入框留空会保留 Keychain 中的原值。桌面小组件自动刷新时不会弹出配置框。
 
+组件显示原粹树脂、每日委托、洞天宝钱、周本减半奖励、探索派遣和参量质变仪状态。只有数值实际达到接口返回的最大值时才会显示“已储满”；网络失败时保留上次成功数据，并明确显示缓存时间。
+
 Cookie 与设备信息只保存到 Scriptable Keychain。组件使用国服米游社接口；官服为 `cn_gf01`，B 服为 `cn_qd01`。Cookie 需来自 `bbs.mihoyo.com` 的完整请求头；仅复制 `ltoken_v2 + ltmid_v2` 可能无法建立登录态。
 
 组件会使用稳定的设备 ID，通过米游社公开的设备指纹接口自动申请配套 `DEVICEFP`。配置页中的 DEVICEFP 可以留空；遇到 `retcode 5003` 时会自动刷新指纹并重试一次。
@@ -26,6 +28,8 @@ Cookie 与设备信息只保存到 Scriptable Keychain。组件使用国服米�
 若标准实时便笺接口仍返回 `5003` 或 `1034`，组件会自动改用米游社 iOS 小组件实时便笺接口。两个数据源都失败时，诊断弹窗会分别显示主接口和备用接口的错误。
 
 安全扫码登录会生成一次性二维码；授权后 Passport QR 接口直接返回 SToken，脚本再在本机获取 LToken 与 CookieToken，凭证只写入 Scriptable Keychain。二维码页面使用 cdnjs 加载开源 QRCode.js，二维码内容在 WebView 本地生成。
+
+需要移除授权时，直接运行主脚本并选择“退出登录”。脚本会删除 Keychain 中的 Cookie、Token 和组件缓存，但保留 UID、昵称及服务器设置。
 
 ### 获取米游社 Cookie
 
