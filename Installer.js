@@ -7,12 +7,12 @@ const BRANCH = "main";
 const BASE_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}`;
 const fm = FileManager.iCloud();
 const FALLBACK_RELEASE = {
-  version: "1.4.0",
+  version: "1.4.1",
   designSystemVersion: "2.9.1",
   notes: [
-    "修复洞天宝钱未满时错误显示已储满。",
-    "新增探索派遣、参量质变仪和周本紧凑状态卡。",
-    "新增缓存时间提示与安全退出登录。"
+    "修正探索派遣完成状态文案，不再误报为可领取。",
+    "派遣数字现在表示已使用槽位，完成数量单独显示。",
+    "保留 1.4.0 的满值判断、缓存提示与登录管理功能。"
   ]
 };
 

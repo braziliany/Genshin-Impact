@@ -1,6 +1,6 @@
 // 原神 · LPL Design System widget for Scriptable
 
-const WIDGET_VERSION = "1.4.0";
+const WIDGET_VERSION = "1.4.1";
 
 let DesignSystem;
 try {
@@ -494,11 +494,11 @@ function cacheAge(at) {
 function expeditionState(d) {
   const items = Array.isArray(d.expeditions) ? d.expeditions : [];
   const max = Number(d.max_expedition_num ?? items.length ?? 0);
-  const finished = items.filter(item => item && (item.status === "Finished" || Number(item.remained_time || 0) <= 0)).length;
+  const finished = items.filter(item => item && item.status === "Finished").length;
   const remaining = items.map(item => Number(item && item.remained_time || 0)).filter(value => value > 0);
   if (!items.length) return { value: `0 / ${max || "—"}`, detail: "暂未派遣", accent: false };
-  if (finished) return { value: `${finished} / ${max || items.length}`, detail: `${finished} 个可领取`, accent: true };
-  return { value: `0 / ${max || items.length}`, detail: remaining.length ? `最近 ${compactDuration(Math.min(...remaining))}` : "进行中", accent: false };
+  if (finished) return { value: `${items.length} / ${max || items.length}`, detail: `${finished} 个已完成`, accent: true };
+  return { value: `${items.length} / ${max || items.length}`, detail: remaining.length ? `最近 ${compactDuration(Math.min(...remaining))}` : "进行中", accent: false };
 }
 
 function transformerState(d) {
