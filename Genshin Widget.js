@@ -1,6 +1,6 @@
 // 原神 · LPL Design System widget for Scriptable
 
-const WIDGET_VERSION = "1.4.1";
+const WIDGET_VERSION = "1.4.2";
 
 let DesignSystem;
 try {
@@ -496,18 +496,18 @@ function expeditionState(d) {
   const max = Number(d.max_expedition_num ?? items.length ?? 0);
   const finished = items.filter(item => item && item.status === "Finished").length;
   const remaining = items.map(item => Number(item && item.remained_time || 0)).filter(value => value > 0);
-  if (!items.length) return { value: `0 / ${max || "—"}`, detail: "暂未派遣", accent: false };
-  if (finished) return { value: `${items.length} / ${max || items.length}`, detail: `${finished} 个已完成`, accent: true };
-  return { value: `${items.length} / ${max || items.length}`, detail: remaining.length ? `最近 ${compactDuration(Math.min(...remaining))}` : "进行中", accent: false };
+  if (!items.length) return { value: `0 / ${max || "—"}`, detail: "未进行探索派遣", accent: false };
+  if (finished) return { value: `${items.length} / ${max || items.length}`, detail: finished === items.length ? "探索完成" : `${finished} 个探索完成`, accent: true };
+  return { value: `${items.length} / ${max || items.length}`, detail: remaining.length ? `剩余探索时间 ${compactDuration(Math.min(...remaining))}` : "探索中", accent: false };
 }
 
 function transformerState(d) {
   const transformer = d.transformer;
-  if (!transformer || transformer.obtained === false) return { value: "—", detail: "暂不可用", accent: false };
+  if (!transformer || transformer.obtained === false) return { value: "—", detail: "尚未获得", accent: false };
   const recovery = transformer.recovery_time || {};
   const seconds = Number(recovery.Day || 0) * 86400 + Number(recovery.Hour || 0) * 3600 + Number(recovery.Minute || 0) * 60 + Number(recovery.Second || 0);
-  if (recovery.reached === true || seconds <= 0) return { value: "可使用", detail: "参量质变仪", accent: true };
-  return { value: compactDuration(seconds), detail: "后可使用", accent: false };
+  if (recovery.reached === true || seconds <= 0) return { value: "可使用", detail: "已准备完成", accent: true };
+  return { value: compactDuration(seconds), detail: "后准备完成", accent: false };
 }
 
 async function getData(cfg) {
@@ -556,35 +556,39 @@ function addResin(widget, d) {
   UI.label(top, `${d.current_resin || 0} / ${maxResin}`, type.title, UI.colors.ink, "bold");
   card.addSpacer(9); UI.progress(card, d.current_resin || 0, maxResin); card.addSpacer(7);
   const bottom = card.addStack(); bottom.centerAlignContent();
-  UI.label(bottom, d.current_resin >= maxResin ? "已回满" : "回满预计 " + duration(d.resin_recovery_time), type.caption, UI.colors.muted);
+  UI.label(bottom, d.current_resin >= maxResin ? "已全部恢复" : "将于" + duration(d.resin_recovery_time) + "后全部恢复", type.caption, UI.colors.muted);
   bottom.addSpacer(); UI.label(bottom, percent(d.current_resin, maxResin) + "%", type.caption, UI.colors.accent, "bold");
 }
 
 function addGrid(widget, d) {
   const grid = widget.addStack(); grid.spacing = spacing.gap;
   const commission = UI.card(grid); UI.setPadding(commission, 12, 12, 12, 12);
-  UI.label(commission, "每日委托", type.caption, UI.colors.muted); commission.addSpacer(5);
+  UI.label(commission, "每日委托奖励", type.caption, UI.colors.muted); commission.addSpacer(5);
   UI.label(commission, (d.finished_task_num || 0) + " / " + (d.total_task_num || 4), type.title, UI.colors.ink, "bold");
   UI.label(commission, d.is_extra_task_reward_received ? "额外奖励已领取" : "额外奖励待领取", type.micro, d.is_extra_task_reward_received ? UI.colors.muted : UI.colors.success);
   grid.addSpacer(1);
   const teapot = UI.card(grid); UI.setPadding(teapot, 12, 12, 12, 12);
-  UI.label(teapot, "洞天宝钱", type.caption, UI.colors.muted); teapot.addSpacer(5);
+  const teapotTitle = UI.label(teapot, "洞天财瓮 - 洞天宝钱", type.caption, UI.colors.muted);
+  teapotTitle.minimumScaleFactor = 0.75;
+  teapot.addSpacer(5);
   UI.label(teapot, (d.current_home_coin || 0) + " / " + (d.max_home_coin || 2400), type.title, UI.colors.ink, "bold");
   const maxHomeCoin = Number(d.max_home_coin || 2400);
   const homeCoin = Number(d.current_home_coin || 0);
   const homeCoinStatus = atMaximum(homeCoin, maxHomeCoin)
-    ? "已储满"
-    : Number(d.home_coin_recovery_time || 0) > 0 ? "还有 " + duration(d.home_coin_recovery_time) : "持续积累中";
+    ? "已达到存储上限"
+    : Number(d.home_coin_recovery_time || 0) > 0 ? "预计" + duration(d.home_coin_recovery_time) + "后达到存储上限" : "正在积累洞天宝钱";
   UI.label(teapot, homeCoinStatus, type.micro, UI.colors.muted);
 }
 
 function addStatusColumn(parent, title, value, detail, accent = false) {
   const column = parent.addStack(); column.layoutVertically();
-  UI.label(column, title, type.micro, UI.colors.muted);
+  const titleLabel = UI.label(column, title, type.micro, UI.colors.muted);
+  titleLabel.minimumScaleFactor = 0.72;
   column.addSpacer(4);
   UI.label(column, value, type.body, accent ? UI.colors.accent : UI.colors.ink, "semibold");
   column.addSpacer(2);
-  UI.label(column, detail, type.micro, accent ? UI.colors.success : UI.colors.muted);
+  const detailLabel = UI.label(column, detail, type.micro, accent ? UI.colors.success : UI.colors.muted);
+  detailLabel.minimumScaleFactor = 0.65;
   return column;
 }
 
@@ -598,9 +602,9 @@ function addOverview(widget, d) {
   UI.label(row, "周常与探索", type.body, UI.colors.ink, "semibold"); row.addSpacer(); UI.badge(row, "实时便笺", UI.colors.accent);
   card.addSpacer(9);
   const columns = card.addStack();
-  addStatusColumn(columns, "周本减半", `${remain} / ${limit}`, remain > 0 ? "仍可使用" : "本周已用完", remain > 0);
+  addStatusColumn(columns, "值得铭记的强敌", `${remain} / ${limit}`, "本周剩余消耗减半次数", remain > 0);
   columns.addSpacer(14);
-  addStatusColumn(columns, "探索派遣", expedition.value, expedition.detail, expedition.accent);
+  addStatusColumn(columns, "探索派遣限制", expedition.value, expedition.detail, expedition.accent);
   columns.addSpacer(14);
   addStatusColumn(columns, "参量质变仪", transformer.value, transformer.detail, transformer.accent);
 }
