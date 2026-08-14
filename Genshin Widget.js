@@ -1,6 +1,6 @@
 // 原神 · LPL Design System widget for Scriptable
 
-const WIDGET_VERSION = "1.4.2";
+const WIDGET_VERSION = "1.4.3";
 
 let DesignSystem;
 try {
@@ -503,7 +503,8 @@ function expeditionState(d) {
 
 function transformerState(d) {
   const transformer = d.transformer;
-  if (!transformer || transformer.obtained === false) return { value: "—", detail: "尚未获得", accent: false };
+  if (transformer === undefined || transformer === null) return { value: "—", detail: "状态未返回", accent: false };
+  if (transformer.obtained === false) return { value: "—", detail: "尚未获得", accent: false };
   const recovery = transformer.recovery_time || {};
   const seconds = Number(recovery.Day || 0) * 86400 + Number(recovery.Hour || 0) * 3600 + Number(recovery.Minute || 0) * 60 + Number(recovery.Second || 0);
   if (recovery.reached === true || seconds <= 0) return { value: "可使用", detail: "已准备完成", accent: true };
@@ -568,8 +569,7 @@ function addGrid(widget, d) {
   UI.label(commission, d.is_extra_task_reward_received ? "额外奖励已领取" : "额外奖励待领取", type.micro, d.is_extra_task_reward_received ? UI.colors.muted : UI.colors.success);
   grid.addSpacer(1);
   const teapot = UI.card(grid); UI.setPadding(teapot, 12, 12, 12, 12);
-  const teapotTitle = UI.label(teapot, "洞天财瓮 - 洞天宝钱", type.caption, UI.colors.muted);
-  teapotTitle.minimumScaleFactor = 0.75;
+  UI.label(teapot, "洞天财瓮", type.caption, UI.colors.muted);
   teapot.addSpacer(5);
   UI.label(teapot, (d.current_home_coin || 0) + " / " + (d.max_home_coin || 2400), type.title, UI.colors.ink, "bold");
   const maxHomeCoin = Number(d.max_home_coin || 2400);
@@ -582,13 +582,13 @@ function addGrid(widget, d) {
 
 function addStatusColumn(parent, title, value, detail, accent = false) {
   const column = parent.addStack(); column.layoutVertically();
-  const titleLabel = UI.label(column, title, type.micro, UI.colors.muted);
-  titleLabel.minimumScaleFactor = 0.72;
+  column.size = new Size(78, 0);
+  UI.label(column, title, type.micro, UI.colors.muted);
   column.addSpacer(4);
   UI.label(column, value, type.body, accent ? UI.colors.accent : UI.colors.ink, "semibold");
   column.addSpacer(2);
   const detailLabel = UI.label(column, detail, type.micro, accent ? UI.colors.success : UI.colors.muted);
-  detailLabel.minimumScaleFactor = 0.65;
+  detailLabel.lineLimit = 2;
   return column;
 }
 
@@ -599,13 +599,13 @@ function addOverview(widget, d) {
   const transformer = transformerState(d);
   const card = UI.card(widget, spacing.cardRadius); UI.setPadding(card, 12, spacing.cardPadding, 12, spacing.cardPadding);
   const row = card.addStack(); row.centerAlignContent();
-  UI.label(row, "周常与探索", type.body, UI.colors.ink, "semibold"); row.addSpacer(); UI.badge(row, "实时便笺", UI.colors.accent);
+  UI.label(row, "周常与探索", type.body, UI.colors.ink, "semibold");
   card.addSpacer(9);
   const columns = card.addStack();
   addStatusColumn(columns, "值得铭记的强敌", `${remain} / ${limit}`, "本周剩余消耗减半次数", remain > 0);
-  columns.addSpacer(14);
+  columns.addSpacer(10);
   addStatusColumn(columns, "探索派遣限制", expedition.value, expedition.detail, expedition.accent);
-  columns.addSpacer(14);
+  columns.addSpacer(10);
   addStatusColumn(columns, "参量质变仪", transformer.value, transformer.detail, transformer.accent);
 }
 
